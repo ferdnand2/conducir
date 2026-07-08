@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.vite/
+
+# scripts de depuración locales (rutas fijas de esta máquina)
+shot.mjs
+shot-study.mjs
+dbg.mjs
