@@ -16,13 +16,14 @@ export class MirrorSystem {
       return rt;
     };
 
-    // yaw = giro respecto a "mirar recto hacia atrás" (+ izquierda); lat = offset lateral de la cámara
+    // yaw = giro respecto a "mirar recto hacia atrás" (+ hacia la derecha del coche);
+    // lat = offset lateral de la cámara (+ derecha)
     this.defs = [
       { key: 'center', rt: mkRT(640, 176), fov: 42, yaw: 0.0, lat: 0.0, pitch: -0.05,
         layout: (W, H) => { const w = Math.min(430, W * 0.32); return { w, h: w * 176 / 640, cx: W / 2, cyTop: 12 }; } },
-      { key: 'left', rt: mkRT(300, 216), fov: 48, yaw: 0.44, lat: -0.85, pitch: -0.12,
+      { key: 'left', rt: mkRT(300, 216), fov: 48, yaw: -0.44, lat: -0.85, pitch: -0.12,
         layout: (W, H) => { const w = Math.min(184, W * 0.145); return { w, h: w * 216 / 300, cx: w * 0.5 + 22, cyTop: H * 0.30 }; } },
-      { key: 'right', rt: mkRT(300, 216), fov: 48, yaw: -0.44, lat: 0.85, pitch: -0.12,
+      { key: 'right', rt: mkRT(300, 216), fov: 48, yaw: 0.44, lat: 0.85, pitch: -0.12,
         layout: (W, H) => { const w = Math.min(184, W * 0.145); return { w, h: w * 216 / 300, cx: W - (w * 0.5 + 22), cyTop: H * 0.30 }; } },
     ];
 
@@ -75,12 +76,13 @@ export class MirrorSystem {
     if (!this.enabled) return;
     const r = this.renderer;
     const h = car.heading;
-    const rightV = new THREE.Vector3(Math.cos(h), 0, -Math.sin(h)); // perpendicular derecha
+    const fwd = new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
+    const rightV = new THREE.Vector3(-fwd.z, 0, fwd.x); // derecha del coche (igual que la cámara principal)
     const eye = new THREE.Vector3(car.pos.x, car.pos.y + 1.35, car.pos.z);
 
     for (const d of this.defs) {
-      const a = h + Math.PI + d.yaw; // dirección: hacia atrás + giro del espejo
-      const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+      // hacia atrás (-fwd) girado d.yaw hacia la derecha del coche
+      const dir = fwd.clone().multiplyScalar(-1).addScaledVector(rightV, Math.tan(d.yaw)).normalize();
       const camPos = eye.clone().addScaledVector(rightV, d.lat);
       d.cam.position.copy(camPos);
       d.cam.lookAt(
