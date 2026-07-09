@@ -26,6 +26,7 @@ export class CityExam {
 
   reportCollision() { this.fault('eliminatoria', 'colision', 'Colisión con otro vehículo', 8); }
   reportRunOver() { this.fault('eliminatoria', 'atropello', 'Atropellar a un peatón', 12); }
+  reportPedestrianYield() { this.fault('eliminatoria', 'peaton', 'No ceder el paso a un peatón en el paso de peatones', 12); }
 
   update(car, s, city, dt) {
     this.time += dt;

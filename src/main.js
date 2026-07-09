@@ -9,6 +9,7 @@ import { TrafficManager } from './traffic.js';
 import { PedestrianManager } from './peatones.js';
 import { MirrorSystem } from './mirrors.js';
 import { City } from './city.js';
+import { CityTraffic, CityPedestrians } from './citylife.js';
 import { CityExam } from './exam.js';
 import { initStudy } from './estudio.js';
 
@@ -50,6 +51,8 @@ cityGroup.visible = false;
 scene.add(cityGroup);
 const city = new City();
 city.buildScene(cityGroup);
+const cityTraffic = new CityTraffic(city, cityGroup);
+const cityPeds = new CityPedestrians(city, cityGroup);
 
 const mirrors = new MirrorSystem(renderer, scene);
 initStudy();
@@ -176,6 +179,8 @@ function beginDrive() {
   if (isCity) {
     car.placeAt(city.startPos.clone(), city.startHeading);
     car.slope = 0;
+    cityTraffic.reset();
+    cityPeds.reset();
     examiner = new CityExam((kind, text) => toast(kind, text));
   } else {
     const start = track.poseAt(8);
@@ -293,6 +298,29 @@ function frame(t) {
       city.update(dt);
       examiner.update(car, sample, city, dt);
       worldLimit = sample.limit;
+
+      // tráfico y peatones urbanos
+      cityTraffic.update(dt, { x: car.pos.x, z: car.pos.z });
+      cityPeds.update(dt);
+      collCd = Math.max(0, collCd - dt);
+      const fC = car.forward;
+      const rC = new THREE.Vector3(-fC.z, 0, fC.x);
+      for (const tc of cityTraffic.cars) {
+        const dx = tc.mesh.position.x - car.pos.x, dz = tc.mesh.position.z - car.pos.z;
+        const df = dx * fC.x + dz * fC.z, dr = dx * rC.x + dz * rC.z;
+        if (Math.abs(df) < 3.9 && Math.abs(dr) < 1.8 && collCd === 0) {
+          collCd = 6; examiner.reportCollision(); car.speed *= -0.15;
+        }
+      }
+      for (const p of cityPeds.onRoad()) {
+        const pdx = p.curX - car.pos.x, pdz = p.curZ - car.pos.z;
+        const along = pdx * fC.x + pdz * fC.z;
+        const lateral = Math.abs(pdx * rC.x + pdz * rC.z);
+        if (pdx * pdx + pdz * pdz < 1.6 * 1.6) { examiner.reportRunOver(); car.speed *= 0.3; }
+        else if (along > 0 && along < 14 && lateral < 3 && car.speed > 2.2) {
+          examiner.reportPedestrianYield();
+        }
+      }
     } else {
       const proj = track.project(car.pos, lastS);
       lastS = proj.s;
