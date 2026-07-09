@@ -190,7 +190,7 @@
   <div id="examPanel" class="hidden">
     <div class="title" id="examTitle">EXAMEN</div>
     <div class="frow"><span>Tiempo</span><span id="examTime">0:00</span></div>
-    <div class="frow"><span>Recorrido</span><span id="examProg">0%</span></div>
+    <div class="frow" id="progRow"><span>Recorrido</span><span id="examProg">0%</span></div>
     <div class="frow lv"><span>Faltas leves</span><span id="cntLeve">0</span></div>
     <div class="frow df"><span>Deficientes</span><span id="cntDef">0</span></div>
     <div class="frow el"><span>Eliminatorias</span><span id="cntElim">0</span></div>
@@ -200,6 +200,13 @@
     <h1>🚗 Simulador de Examen de Conducir</h1>
     <div class="sub">Examen práctico DGT · circuito con señales reales</div>
     <div class="card">
+      <div class="row">
+        <label>Mapa</label>
+        <div class="seg" id="segMap">
+          <button data-v="rural" class="sel">Rural (circuito)</button>
+          <button data-v="city">Ciudad (libre)</button>
+        </div>
+      </div>
       <div class="row">
         <label>Modo</label>
         <div class="seg" id="segMode">

@@ -1,6 +1,86 @@
 // Examinador virtual: detección de infracciones y calificación estilo DGT
 // NO APTO con: 1 eliminatoria, 2 deficientes o 10 leves.
 
+// Examinador de ciudad (circulación libre): solo avisos, sin veredicto final.
+export class CityExam {
+  constructor(notify) {
+    this.notify = notify;
+    this.faults = [];
+    this.cooldowns = {};
+    this.timers = { over: 0, overE: 0, wrong: 0 };
+    this.approach = null; // { key, minV, committed, control, axis }
+    this.time = 0;
+    this.distance = 0;
+    this.mode = 'practica';
+    this.finished = false;
+  }
+
+  fault(kind, key, text, cd = 10) {
+    if (this.cooldowns[key] > 0) return;
+    this.cooldowns[key] = cd;
+    this.faults.push({ kind, text, time: this.time });
+    this.notify(kind, text);
+  }
+
+  count(kind) { return this.faults.filter((f) => f.kind === kind).length; }
+
+  reportCollision() { this.fault('eliminatoria', 'colision', 'Colisión con otro vehículo', 8); }
+  reportRunOver() { this.fault('eliminatoria', 'atropello', 'Atropellar a un peatón', 12); }
+
+  update(car, s, city, dt) {
+    this.time += dt;
+    this.distance += Math.abs(car.speed) * dt;
+    for (const k in this.cooldowns) this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
+
+    const kmh = car.kmh, limit = s.limit, over = kmh - limit;
+
+    // velocidad
+    if (over > limit * 0.5) {
+      this.timers.overE += dt;
+      if (this.timers.overE > 1.5) this.fault('eliminatoria', 'vel-e',
+        `Velocidad muy superior (${Math.round(kmh)} en zona de ${limit})`, 16);
+    } else {
+      this.timers.overE = 0;
+      if (over > limit * 0.2) { this.timers.over += dt; if (this.timers.over > 2.5)
+        this.fault('deficiente', 'vel-d', `Exceso de velocidad (${Math.round(kmh)} en zona de ${limit})`, 12); }
+      else if (over > 4) { this.timers.over += dt; if (this.timers.over > 4)
+        this.fault('leve', 'vel-l', `Superar el límite de ${limit} km/h`, 12); }
+      else this.timers.over = 0;
+    }
+
+    // salirse de la calzada / subir a la acera
+    if (s.offroad) this.fault('deficiente', 'road', 'Salir de la calzada o subir a la acera', 6);
+
+    // circular por el carril contrario
+    if (s.onRoad && s.lat < -0.8 && car.speed > 2) {
+      this.timers.wrong += dt;
+      if (this.timers.wrong > 2.5) this.fault('deficiente', 'side', 'Circular por el carril contrario', 10);
+    } else this.timers.wrong = 0;
+
+    // cruces: semáforo en rojo / STOP
+    if (s.node && s.distToNode < 26) {
+      const key = `${s.node.i}-${s.node.j}`;
+      if (!this.approach || this.approach.key !== key) {
+        this.approach = { key, minV: Infinity, committed: false, control: s.node.control, axis: s.axis };
+      }
+      this.approach.minV = Math.min(this.approach.minV, Math.abs(car.speed));
+      if (!this.approach.committed && s.distToNode < city.roadHalf + 1) {
+        this.approach.committed = true;
+        const minKmh = this.approach.minV * 3.6;
+        if (s.node.control === 'light') {
+          const st = city.axisState(s.axis);
+          if (st === 'red') this.fault('eliminatoria', 'rojo', 'Saltarse un semáforo en rojo', 14);
+          else if (st === 'amber' && minKmh > 22)
+            this.fault('leve', 'ambar', 'Pasar el semáforo en ámbar sin necesidad', 12);
+        } else if (s.axis === 'ew') { // esta bocacalle tiene STOP
+          if (minKmh > 8) this.fault('eliminatoria', 'stop', 'No respetar la señal de STOP', 16);
+          else if (minKmh > 1.5) this.fault('deficiente', 'stop', 'No detenerse por completo en el STOP', 16);
+        }
+      }
+    }
+  }
+}
+
 export class Examiner {
   constructor(track, mode, notify) {
     this.track = track;
