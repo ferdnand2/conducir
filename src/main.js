@@ -7,6 +7,7 @@ import { GestureController } from './gestures.js';
 import { HUD, toast } from './hud.js';
 import { TrafficManager } from './traffic.js';
 import { PedestrianManager } from './peatones.js';
+import { MirrorSystem } from './mirrors.js';
 import { initStudy } from './estudio.js';
 
 // ---------- escena ----------
@@ -25,6 +26,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  mirrors.layout(window.innerWidth, window.innerHeight);
 });
 
 scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x5f7a45, 1.0));
@@ -37,6 +39,7 @@ track.buildScene(scene);
 
 const traffic = new TrafficManager(track, scene);
 const peds = new PedestrianManager(track, scene);
+const mirrors = new MirrorSystem(renderer, scene);
 initStudy();
 
 // capó del coche (referencia visual en primera persona)
@@ -327,6 +330,7 @@ function frame(t) {
   }
 
   renderer.render(scene, camera);
+  if (running && car) mirrors.render(car);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
