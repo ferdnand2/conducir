@@ -36,6 +36,27 @@
       padding: 14px; font-size: 1.1rem; font-weight: 600; cursor: pointer; margin-top: 6px;
     }
     #startBtn:hover { background: #37b24d; }
+    #sensBlock {
+      border-top: 1px solid #2d3a55; padding-top: 14px; margin-top: 2px;
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    .sensHead { font-size: 0.9rem; color: #c6d2e4; font-weight: 600; }
+    .srow { display: grid; grid-template-columns: 110px 1fr 56px; align-items: center; gap: 12px; }
+    .srow label { font-size: 0.88rem; color: #a9b8d0; }
+    .srow input[type="range"] {
+      -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px;
+      background: #34456a; outline: none;
+    }
+    .srow input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: #2f9e44; cursor: pointer; border: 2px solid #dbe6f5;
+    }
+    .srow input[type="range"]::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%; background: #2f9e44;
+      cursor: pointer; border: 2px solid #dbe6f5;
+    }
+    .sval { font-size: 0.82rem; color: #7cd9ff; text-align: right; }
+    .senshint { font-size: 0.76rem; color: #7d8ba4; line-height: 1.4; }
     #studyBtn {
       background: #2b3d5c; color: #dce6f5; border: 1px solid #3a4a6b; border-radius: 10px;
       padding: 11px; font-size: 0.95rem; cursor: pointer;
@@ -199,6 +220,20 @@
           <button data-v="gestos" class="sel">Gestos (webcam)</button>
           <button data-v="teclado">Teclado</button>
         </div>
+      </div>
+      <div id="sensBlock">
+        <div class="sensHead">Sensibilidad de los gestos</div>
+        <div class="srow">
+          <label>Giro del volante</label>
+          <input type="range" id="sensSteer" min="1" max="10" value="4" />
+          <span class="sval" id="sensSteerVal">Media</span>
+        </div>
+        <div class="srow">
+          <label>Acelerador</label>
+          <input type="range" id="sensThrottle" min="1" max="10" value="4" />
+          <span class="sval" id="sensThrottleVal">Media</span>
+        </div>
+        <div class="senshint">Más bajo = hay que mover más las manos para el mismo efecto (control más suave y preciso). Ajústalo si el coche reacciona demasiado.</div>
       </div>
       <button id="startBtn">Comenzar</button>
       <button id="studyBtn">📚 Consultas: señales y teoría</button>

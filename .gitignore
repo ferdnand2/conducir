@@ -5,6 +5,5 @@ dist/
 .vite/
 
 # scripts de depuración locales (rutas fijas de esta máquina)
-shot.mjs
-shot-study.mjs
+shot*.mjs
 dbg.mjs

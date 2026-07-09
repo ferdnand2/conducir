@@ -42,6 +42,8 @@ export class GestureController {
     this.state = 'loading'; // loading | camera | calibrating | ready
     this.calib = { scale: 0, y: 0.5, progress: 0, swap: false };
     this.smooth = { steer: 0, throttle: 0 };
+    // sensibilidad 0..1 (0 = hay que mover mucho las manos; 1 = muy sensible)
+    this.sens = { steer: 0.4, throttle: 0.4 };
     this.gearArmed = true;
     this.indCooldown = 0;
     this.lastHands = [];
@@ -50,6 +52,12 @@ export class GestureController {
   }
 
   get ready() { return this.state === 'ready'; }
+
+  // s = { steer, throttle } en 0..1
+  setSensitivity(s) {
+    if (s.steer != null) this.sens.steer = Math.max(0, Math.min(1, s.steer));
+    if (s.throttle != null) this.sens.throttle = Math.max(0, Math.min(1, s.throttle));
+  }
 
   async init() {
     // BASE_URL = '/' en local y '/conducir/' en GitHub Pages
@@ -150,10 +158,12 @@ export class GestureController {
     const rightFist = right.ext === 0;
 
     // ---- volante: ángulo de la línea entre muñecas ----
+    // fullLock = inclinación necesaria para giro completo; menor sensibilidad = más ángulo
     const dy = right.wrist.y - left.wrist.y;
     const dx = Math.max(0.05, right.wrist.mx - left.wrist.mx);
     const roll = Math.atan2(dy, dx);
-    let steer = Math.max(-1, Math.min(1, roll / 0.75));
+    const fullLock = 1.5 - 1.05 * this.sens.steer; // sens 0→1.5rad (~86°), 1→0.45rad (~26°)
+    let steer = Math.max(-1, Math.min(1, roll / fullLock));
     if (Math.abs(steer) < 0.07) steer = 0;
     this.smooth.steer += (steer - this.smooth.steer) * Math.min(1, dt * 10);
     out.steer = this.smooth.steer;
@@ -165,7 +175,9 @@ export class GestureController {
     // ---- acelerador: manos más cerca de la cámara que en la calibración ----
     if (!rightFist && !out.clutch) {
       const ratio = ((left.scale + right.scale) / 2) / this.calib.scale;
-      const t = Math.max(0, Math.min(1, (ratio - 1.13) / 0.42));
+      // thrRange = cuánto hay que acercar las manos para gas a fondo; menor sensibilidad = más recorrido
+      const thrRange = 0.8 - 0.56 * this.sens.throttle; // sens 0→0.80, 1→0.24
+      const t = Math.max(0, Math.min(1, (ratio - 1.13) / thrRange));
       this.smooth.throttle += (t - this.smooth.throttle) * Math.min(1, dt * 6);
     } else {
       this.smooth.throttle = Math.max(0, this.smooth.throttle - dt * 4);

@@ -72,6 +72,25 @@ for (const [segId, key] of [['segMode', 'mode'], ['segCar', 'car'], ['segCtrl', 
   });
 }
 
+// sensibilidad de los gestos (deslizadores 1..10 → 0..1)
+config.sensSteer = 0.4;
+config.sensThrottle = 0.4;
+const sensLabel = (v) => (v <= 3 ? 'Baja' : v <= 5 ? 'Media' : v <= 7 ? 'Alta' : 'Muy alta');
+for (const [id, key, valId] of [
+  ['sensSteer', 'sensSteer', 'sensSteerVal'],
+  ['sensThrottle', 'sensThrottle', 'sensThrottleVal'],
+]) {
+  const el = $(id);
+  const apply = () => {
+    const v = Number(el.value);
+    config[key] = (v - 1) / 9;
+    $(valId).textContent = sensLabel(v);
+    if (gestures) gestures.setSensitivity({ steer: config.sensSteer, throttle: config.sensThrottle });
+  };
+  el.addEventListener('input', apply);
+  apply();
+}
+
 $('startBtn').addEventListener('click', startFlow);
 $('retryBtn').addEventListener('click', () => { $('results').classList.add('hidden'); beginDrive(); });
 $('menuBtn').addEventListener('click', () => { $('results').classList.add('hidden'); showMenu(); });
@@ -93,6 +112,7 @@ async function startFlow() {
   if (config.ctrl === 'gestos') {
     $('calib').classList.remove('hidden');
     gestures = new GestureController(document.getElementById('cam'));
+    gestures.setSensitivity({ steer: config.sensSteer, throttle: config.sensThrottle });
     controller = gestures;
     try {
       $('calibMsg').textContent = 'Cargando modelo de detección de manos…';
