@@ -1,14 +1,15 @@
-// Control por gestos con MediaPipe Hands
-//  - dos manos abiertas: girar el volante (ángulo entre las muñecas)
-//  - acercar las manos a la cámara: acelerar (proporcional)
-//  - dos puños: frenar (+ embrague en manual)
-//  - puño izquierdo solo: embrague
-//  - con embrague pisado, mano derecha arriba/abajo: subir/bajar marcha
-//  - solo el índice extendido: intermitente de ese lado
+// Control por gestos con MediaPipe Hands. Vocabulario (parecido a llevar el volante):
+//  - dos puños cerrados: conducir (volante = inclinación de la línea entre muñecas;
+//      gas proporcional a acercar las manos a la cámara)
+//  - dos manos abiertas: frenar / detenerse
+//  - dos manos volteadas (dedos hacia abajo): marcha atrás
+//  - mano izquierda abierta = embrague; con el embrague pisado, la mano derecha indica el cambio:
+//      derecha levantada = subir marcha · derecha volteada (dedos abajo) = bajar marcha
+//  - sacar el pulgar de un puño = intermitente de ese lado (luz de cruce al girar)
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
-const WRIST = 0, INDEX_MCP = 5;
-const FINGERS = [[8, 6], [12, 10], [16, 14], [20, 18]]; // [punta, articulación]
+const WRIST = 0, THUMB_TIP = 4, INDEX_MCP = 5, MIDDLE_MCP = 9;
+const FINGERS = [[8, 6], [12, 10], [16, 14], [20, 18]]; // [punta, articulación] índice..meñique
 
 function extendedCount(lm) {
   const w = lm[WRIST];
@@ -21,18 +22,19 @@ function extendedCount(lm) {
   return n;
 }
 
-function indexOnly(lm) {
-  const w = lm[WRIST];
-  const ext = FINGERS.map(([tip, pip]) => {
-    const dTip = Math.hypot(lm[tip].x - w.x, lm[tip].y - w.y);
-    const dPip = Math.hypot(lm[pip].x - w.x, lm[pip].y - w.y);
-    return dTip > dPip * 1.15;
-  });
-  return ext[0] && !ext[1] && !ext[2] && !ext[3];
-}
-
 function handScale(lm) {
   return Math.hypot(lm[INDEX_MCP].x - lm[WRIST].x, lm[INDEX_MCP].y - lm[WRIST].y);
+}
+
+// mano "volteada": los nudillos quedan por debajo de la muñeca (dedos apuntando hacia abajo)
+function fingersDown(lm) {
+  return lm[MIDDLE_MCP].y > lm[WRIST].y + 0.03;
+}
+
+// pulgar separado (four fingers closed + thumb lateral): intermitente
+function thumbOut(lm, scale) {
+  const spread = Math.hypot(lm[THUMB_TIP].x - lm[INDEX_MCP].x, lm[THUMB_TIP].y - lm[INDEX_MCP].y);
+  return spread > scale * 1.05;
 }
 
 export class GestureController {
@@ -92,13 +94,19 @@ export class GestureController {
       const lm = res.landmarks[i];
       let label = handedness?.[i]?.[0]?.categoryName ?? 'Right';
       if (this.calib.swap) label = label === 'Right' ? 'Left' : 'Right';
+      const scale = handScale(lm);
+      const ext = extendedCount(lm);
+      const down = fingersDown(lm);
       this.lastHands.push({
         lm,
         label,
         wrist: { mx: 1 - lm[WRIST].x, y: lm[WRIST].y }, // mx = coordenada espejada
-        ext: extendedCount(lm),
-        pointing: indexOnly(lm),
-        scale: handScale(lm),
+        ext,
+        scale,
+        down,
+        fist: ext <= 1 && !down,
+        open: ext >= 3 && !down,
+        thumb: ext <= 1 && thumbOut(lm, scale),
       });
     }
     // si el modelo etiqueta las dos manos igual, desambigua por posición
@@ -134,6 +142,13 @@ export class GestureController {
     return this.calib.progress;
   }
 
+  // gas proporcional a acercar las manos respecto a la calibración
+  proxThrottle(left, right) {
+    const ratio = ((left.scale + right.scale) / 2) / (this.calib.scale || 0.001);
+    const thrRange = 0.8 - 0.56 * this.sens.throttle; // sens 0→0.80, 1→0.24
+    return Math.max(0, Math.min(1, (ratio - 1.13) / thrRange));
+  }
+
   poll(dt) {
     this.detect();
     this.indCooldown = Math.max(0, this.indCooldown - dt);
@@ -143,7 +158,7 @@ export class GestureController {
     const out = {
       steer: this.smooth.steer, throttle: 0, brake: 0, clutch: false,
       shiftUp: false, shiftDown: false, indLeft: false, indRight: false,
-      tracking: !!(left && right),
+      reverse: false, tracking: !!(left && right),
     };
 
     if (!left || !right) {
@@ -154,11 +169,7 @@ export class GestureController {
       return out;
     }
 
-    const leftFist = left.ext === 0;
-    const rightFist = right.ext === 0;
-
-    // ---- volante: ángulo de la línea entre muñecas ----
-    // fullLock = inclinación necesaria para giro completo; menor sensibilidad = más ángulo
+    // ---- volante: ángulo de la línea entre muñecas (con cualquier postura) ----
     const dy = right.wrist.y - left.wrist.y;
     const dx = Math.max(0.05, right.wrist.mx - left.wrist.mx);
     const roll = Math.atan2(dy, dx);
@@ -168,37 +179,46 @@ export class GestureController {
     this.smooth.steer += (steer - this.smooth.steer) * Math.min(1, dt * 10);
     out.steer = this.smooth.steer;
 
-    // ---- embrague y freno ----
-    out.clutch = leftFist;                       // puño izquierdo = embrague
-    if (leftFist && rightFist) out.brake = 1;    // dos puños = frenar
-
-    // ---- acelerador: manos más cerca de la cámara que en la calibración ----
-    if (!rightFist && !out.clutch) {
-      const ratio = ((left.scale + right.scale) / 2) / this.calib.scale;
-      // thrRange = cuánto hay que acercar las manos para gas a fondo; menor sensibilidad = más recorrido
-      const thrRange = 0.8 - 0.56 * this.sens.throttle; // sens 0→0.80, 1→0.24
-      const t = Math.max(0, Math.min(1, (ratio - 1.13) / thrRange));
-      this.smooth.throttle += (t - this.smooth.throttle) * Math.min(1, dt * 6);
-    } else {
-      this.smooth.throttle = Math.max(0, this.smooth.throttle - dt * 4);
+    // ---- intermitentes: pulgar fuera de un puño (edge + cooldown) ----
+    if (this.indCooldown === 0) {
+      if (left.thumb && !right.thumb) { out.indLeft = true; this.indCooldown = 1.2; }
+      else if (right.thumb && !left.thumb) { out.indRight = true; this.indCooldown = 1.2; }
     }
-    out.throttle = this.smooth.throttle;
 
-    // ---- cambio de marcha: embrague pisado + mano derecha arriba/abajo ----
-    if (out.clutch && !rightFist) {
+    let throttleTarget = 0;
+
+    if (left.down && right.down) {
+      // ---- marcha atrás: las dos manos volteadas ----
+      out.reverse = true;
+      throttleTarget = this.proxThrottle(left, right);
+      this.gearArmed = true;
+    } else if (left.open && right.open) {
+      // ---- frenar / detenerse: las dos manos abiertas ----
+      out.brake = 1;
+      this.gearArmed = true;
+    } else if (left.open) {
+      // ---- embrague (mano izquierda abierta) + cambio con la derecha ----
+      out.clutch = true;
       const dyGear = right.wrist.y - this.calib.y;
-      if (this.gearArmed && dyGear < -0.13) { out.shiftUp = true; this.gearArmed = false; }
-      else if (this.gearArmed && dyGear > 0.13) { out.shiftDown = true; this.gearArmed = false; }
-      else if (Math.abs(dyGear) < 0.07) this.gearArmed = true;
+      if (right.down) {
+        if (this.gearArmed) { out.shiftDown = true; this.gearArmed = false; }
+      } else if (dyGear < -0.13) {
+        if (this.gearArmed) { out.shiftUp = true; this.gearArmed = false; }
+      } else if (Math.abs(dyGear) < 0.09) {
+        this.gearArmed = true;
+      }
+    } else if (left.fist && right.fist) {
+      // ---- conducir: los dos puños ----
+      throttleTarget = this.proxThrottle(left, right);
     } else {
+      // postura intermedia: dejar rodar
       this.gearArmed = true;
     }
 
-    // ---- intermitentes: solo índice extendido ----
-    if (this.indCooldown === 0) {
-      if (left.pointing && !right.pointing) { out.indLeft = true; this.indCooldown = 1.2; }
-      else if (right.pointing && !left.pointing) { out.indRight = true; this.indCooldown = 1.2; }
-    }
+    // suavizado del gas
+    const k = throttleTarget > this.smooth.throttle ? dt * 6 : dt * 8;
+    this.smooth.throttle += (throttleTarget - this.smooth.throttle) * Math.min(1, k);
+    out.throttle = this.smooth.throttle;
 
     return out;
   }

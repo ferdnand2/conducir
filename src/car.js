@@ -80,6 +80,19 @@ export class Car {
     const v = this.speed;
     const absV = Math.abs(v);
 
+    // ---- marcha atrás por gesto (dos manos volteadas) ----
+    // Solo aplica al control por gestos, que define c.reverse; el teclado no lo toca.
+    if (c.reverse !== undefined) {
+      if (c.reverse) {
+        if (this.transmission === 'auto') this.lever = 'R';
+        else if (absV < 1.5 && this.gear >= 0) this.gear = -1;
+      } else if (c.throttle > 0.02 && !c.clutch) {
+        // al volver a conducir hacia delante, salir de la marcha atrás
+        if (this.transmission === 'auto' && this.lever === 'R' && absV < 1.2) this.lever = 'D';
+        else if (this.transmission === 'manual' && this.gear === -1 && v > -0.4) this.gear = 1;
+      }
+    }
+
     // ---- dirección (sensible a la velocidad) ----
     const maxSteer = 0.55 / (1 + absV * 0.09);
     const targetSteer = c.steer * maxSteer;
