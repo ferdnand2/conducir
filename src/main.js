@@ -8,6 +8,7 @@ import { HUD, toast } from './hud.js';
 import { TrafficManager } from './traffic.js';
 import { PedestrianManager } from './peatones.js';
 import { MirrorSystem } from './mirrors.js';
+import { Minimap } from './minimap.js';
 import { City } from './city.js';
 import { CityTraffic, CityPedestrians } from './citylife.js';
 import { CityExam } from './exam.js';
@@ -55,6 +56,7 @@ const cityTraffic = new CityTraffic(city, cityGroup);
 const cityPeds = new CityPedestrians(city, cityGroup);
 
 const mirrors = new MirrorSystem(renderer, scene);
+const minimap = new Minimap(document.getElementById('miniCanvas'));
 initStudy();
 
 // capó del coche (referencia visual en primera persona)
@@ -118,6 +120,7 @@ function showMenu() {
   $('menu').classList.remove('hidden');
   $('examPanel').classList.add('hidden');
   $('previewCanvas').classList.add('hidden');
+  $('miniCanvas').classList.add('hidden');
   $('trackStatus').classList.add('hidden');
   if (gestures) { gestures.dispose(); gestures = null; }
 }
@@ -212,6 +215,8 @@ function beginDrive() {
     ? 'PRÁCTICA · CIUDAD'
     : config.mode === 'examen' ? 'EXAMEN PRÁCTICO' : 'PRÁCTICA LIBRE';
   $('progRow').classList.toggle('hidden', isCity);
+  minimap.setWorld(isCity ? 'city' : 'rural', isCity ? city : track);
+  $('miniCanvas').classList.remove('hidden');
   if (config.ctrl === 'gestos') $('previewCanvas').classList.remove('hidden');
 
   if (isCity) {
@@ -388,6 +393,8 @@ function frame(t) {
     hood.rotation.x = -Math.asin(Math.max(-0.5, Math.min(0.5, car.slope)));
 
     hud.draw(car, worldLimit, dt);
+    if (config.map === 'city') minimap.render(car, { traffic: cityTraffic.cars, peds: cityPeds.peds });
+    else minimap.render(car, { traffic: traffic.cars });
     if (config.ctrl === 'gestos') {
       gestures.drawPreview(previewCtx, 320, 240);
       $('trackStatus').classList.toggle('hidden', c.tracking);

@@ -177,6 +177,11 @@
       position: absolute; left: 224px; bottom: 18px; z-index: 11; color: #ffd43b;
       font-size: 0.85rem; background: rgba(16,22,36,0.7); padding: 6px 12px; border-radius: 8px;
     }
+    #miniCanvas {
+      position: absolute; right: 14px; bottom: 14px; width: 190px; height: 190px;
+      z-index: 11; border-radius: 10px; border: 2px solid rgba(255,255,255,0.22);
+      background: #141a26; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    }
     video { display: none; }
   </style>
 </head>
@@ -184,6 +189,7 @@
   <div id="gl"></div>
   <canvas id="hudCanvas" width="900" height="195"></canvas>
   <canvas id="previewCanvas" width="320" height="240" class="hidden"></canvas>
+  <canvas id="miniCanvas" width="200" height="200" class="hidden"></canvas>
   <div id="trackStatus" class="hidden">⚠ Manos no detectadas</div>
   <div id="toasts"></div>
 
