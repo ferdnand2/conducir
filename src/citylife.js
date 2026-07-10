@@ -63,7 +63,10 @@ export class CityTraffic {
   // elige nueva dirección en el nodo (i,j), sin dar media vuelta ni salir de la malla
   chooseDir(c, i, j) {
     const cands = [];
-    for (const turn of [0, 1, 3]) { // recto, izquierda, derecha
+    const restrict = this.city.nodeAt(i, j)?.restrict;
+    for (const turn of [0, 1, 3]) { // recto, izquierda(+1), derecha(+3)
+      if (restrict === 'noLeft' && turn === 1) continue;
+      if (restrict === 'noRight' && turn === 3) continue;
       const nd = (c.dir + turn) % 4;
       // ¿a qué calle pasa y hasta dónde puede avanzar?
       const naxis = this.axisOf(nd);

@@ -265,6 +265,38 @@ export function drawEndProhib() {
   return c;
 }
 
+// R-303: giro a la izquierda prohibido
+export function drawNoLeft() {
+  return circleSign((ctx) => {
+    ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+    ctx.lineWidth = 20; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(150, 188); ctx.lineTo(150, 120); ctx.lineTo(104, 120);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(104, 120); ctx.lineTo(128, 96); ctx.lineTo(128, 144);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#c1121f'; ctx.lineWidth = 22;
+    ctx.beginPath(); ctx.moveTo(58, 198); ctx.lineTo(198, 58); ctx.stroke();
+  });
+}
+
+// R-304: giro a la derecha prohibido
+export function drawNoRight() {
+  return circleSign((ctx) => {
+    ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+    ctx.lineWidth = 20; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(106, 188); ctx.lineTo(106, 120); ctx.lineTo(152, 120);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(152, 120); ctx.lineTo(128, 96); ctx.lineTo(128, 144);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#c1121f'; ctx.lineWidth = 22;
+    ctx.beginPath(); ctx.moveTo(58, 198); ctx.lineTo(198, 58); ctx.stroke();
+  });
+}
+
 // R-308: estacionamiento prohibido
 export function drawNoParking() {
   const [c, ctx] = makeCanvas();
@@ -313,6 +345,8 @@ const DRAWERS = {
   crosswalk: drawCrosswalkWarn,
   animals: drawAnimals,
   noOvertake: drawNoOvertake,
+  noLeft: drawNoLeft,
+  noRight: drawNoRight,
   endProhib: drawEndProhib,
   noParking: drawNoParking,
   crossing: drawCrossing,

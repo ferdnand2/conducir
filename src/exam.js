@@ -9,6 +9,7 @@ export class CityExam {
     this.cooldowns = {};
     this.timers = { over: 0, overE: 0, wrong: 0 };
     this.approach = null; // { key, minV, committed, control, axis }
+    this.inNode = null;   // { node, enterDir } para detectar giros prohibidos
     this.time = 0;
     this.distance = 0;
     this.mode = 'practica';
@@ -27,6 +28,32 @@ export class CityExam {
   reportCollision() { this.fault('eliminatoria', 'colision', 'Colisión con otro vehículo', 8); }
   reportRunOver() { this.fault('eliminatoria', 'atropello', 'Atropellar a un peatón', 12); }
   reportPedestrianYield() { this.fault('eliminatoria', 'peaton', 'No ceder el paso a un peatón en el paso de peatones', 12); }
+
+  // dirección cardinal de avance: 0=+X 1=+Z 2=-X 3=-Z (misma convención que el tráfico)
+  dirOf(h) {
+    const s = Math.sin(h), c = Math.cos(h);
+    if (Math.abs(c) >= Math.abs(s)) return c > 0 ? 1 : 3;
+    return s > 0 ? 0 : 2;
+  }
+
+  // detecta el giro realizado al cruzar una intersección con restricción
+  checkTurn(car, city) {
+    const B = city.B;
+    const ni = Math.max(0, Math.min(city.NX - 1, Math.round(car.pos.x / B)));
+    const nj = Math.max(0, Math.min(city.NZ - 1, Math.round(car.pos.z / B)));
+    const nn = city.nodeAt(ni, nj);
+    const inBox = Math.abs(car.pos.x - nn.x) < city.roadHalf + 1.2 &&
+                  Math.abs(car.pos.z - nn.z) < city.roadHalf + 1.2;
+    if (inBox && !this.inNode) {
+      this.inNode = { node: nn, enterDir: this.dirOf(car.heading) };
+    } else if (!inBox && this.inNode) {
+      const turn = (this.dirOf(car.heading) - this.inNode.enterDir + 4) % 4;
+      const r = this.inNode.node.restrict;
+      if (r === 'noLeft' && turn === 1) this.fault('deficiente', 'giro', 'Giro prohibido a la izquierda', 12);
+      else if (r === 'noRight' && turn === 3) this.fault('deficiente', 'giro', 'Giro prohibido a la derecha', 12);
+      this.inNode = null;
+    }
+  }
 
   update(car, s, city, dt) {
     this.time += dt;
@@ -51,6 +78,9 @@ export class CityExam {
 
     // salirse de la calzada / subir a la acera
     if (s.offroad) this.fault('deficiente', 'road', 'Salir de la calzada o subir a la acera', 6);
+
+    // giro prohibido en intersección restringida
+    this.checkTurn(car, city);
 
     // circular por el carril contrario
     if (s.onRoad && s.lat < -0.8 && car.speed > 2) {

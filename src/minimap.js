@@ -32,7 +32,7 @@ export class Minimap {
     this.scale = Math.min((W - 2 * M) / spanX, (H - 2 * M) / spanZ);
     this.offX = M + (W - 2 * M - spanX * this.scale) / 2;
     this.offY = M + (H - 2 * M - spanZ * this.scale) / 2;
-    this.spanZ = spanZ;
+    this.spanX = spanX; this.spanZ = spanZ;
 
     // precomputa geometría estática
     if (kind === 'city') {
@@ -54,9 +54,10 @@ export class Minimap {
     }
   }
 
-  // world (x,z) → canvas [px,py] con Z hacia arriba (norte arriba)
+  // world (x,z) → canvas [px,py]. Norte (+Z) arriba y, como la derecha del
+  // conductor es -X, se invierte el eje X para que izquierda/derecha coincidan.
   pc(x, z) {
-    return [this.offX + (x - this.min.x) * this.scale,
+    return [this.offX + (this.spanX - (x - this.min.x)) * this.scale,
       this.offY + (this.spanZ - (z - this.min.z)) * this.scale];
   }
 
@@ -77,11 +78,15 @@ export class Minimap {
       for (const [p, q] of this.streets) {
         ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
       }
-      // cruces: verde = semáforo, naranja = stop
+      // cruces: verde = semáforo, naranja = stop; anillo magenta = giro restringido
       for (const n of c.nodes) {
         const p = this.pc(n.x, n.z);
         ctx.fillStyle = n.control === 'light' ? '#4dd06a' : '#e0763a';
         ctx.beginPath(); ctx.arc(p[0], p[1], 2.6, 0, Math.PI * 2); ctx.fill();
+        if (n.restrict) {
+          ctx.strokeStyle = '#e879f9'; ctx.lineWidth = 1.4;
+          ctx.beginPath(); ctx.arc(p[0], p[1], 4.4, 0, Math.PI * 2); ctx.stroke();
+        }
       }
     } else {
       ctx.strokeStyle = '#3f4855'; ctx.lineWidth = this.trackW; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -112,7 +117,8 @@ export class Minimap {
 
     // conductor: flecha orientada
     const p = this.pc(car.pos.x, car.pos.z);
-    const dx = Math.sin(car.heading), dy = -Math.cos(car.heading);
+    // eje X invertido en pc → la componente X de la dirección también se invierte
+    const dx = -Math.sin(car.heading), dy = -Math.cos(car.heading);
     const px = -dy, py = dx; // perpendicular
     ctx.beginPath();
     ctx.moveTo(p[0] + dx * 8, p[1] + dy * 8);

@@ -5,15 +5,20 @@ import { createSign } from './signals.js';
 
 const B = 110;        // separación entre calles (tamaño de manzana)
 const NX = 5, NZ = 5; // nº de calles verticales / horizontales (intersecciones NX×NZ)
-const RH = 5.0;       // media anchura de calzada
-const LANE = 2.5;     // distancia del centro de la calzada al centro del carril
+const RH = 6.0;       // media anchura de calzada (2 carriles por sentido, 3 m cada uno)
+const LANE_OUT = 4.5; // centro del carril exterior (circulación normal)
+const LANE_IN = 1.5;  // centro del carril interior (para adelantar sin invadir el contrario)
+
+// intersecciones con restricción de giro (clave "i-j" → señal)
+const TURN_RESTRICT = { '1-2': 'noLeft', '3-2': 'noRight', '2-1': 'noRight', '2-3': 'noLeft' };
 
 // ciclo de semáforos (s): verde N-S, ámbar, todo-rojo, verde E-W, ámbar, todo-rojo
 const CYCLE = 18;
 
 export class City {
   constructor() {
-    this.B = B; this.NX = NX; this.NZ = NZ; this.roadHalf = RH; this.lane = LANE;
+    this.B = B; this.NX = NX; this.NZ = NZ; this.roadHalf = RH;
+    this.lane = LANE_OUT; this.laneIn = LANE_IN;
     this.maxX = (NX - 1) * B; this.maxZ = (NZ - 1) * B;
     this.lightTimer = 0;
     this.lightLamps = []; // { axis, red, amber, green }
@@ -31,12 +36,13 @@ export class City {
           i, j, x: i * B, z: j * B,
           // 'light' = semáforo; si no, la calle E-W (viaje en X) tiene STOP y la N-S prioridad
           control: light ? 'light' : 'stop',
+          restrict: TURN_RESTRICT[`${i}-${j}`] ?? null, // 'noLeft' | 'noRight' | null
         });
       }
     }
 
-    // arranca en el carril derecho de una calle vertical, mirando al norte (+Z)
-    this.startPos = new THREE.Vector3(B - LANE, 0, 18);
+    // arranca en el carril exterior de una calle vertical, mirando al norte (+Z)
+    this.startPos = new THREE.Vector3(B - LANE_OUT, 0, 18);
     this.startHeading = 0;
   }
 
@@ -114,13 +120,18 @@ export class City {
 
   // -------- construcción de la escena --------
   streetTexture() {
+    // 64 px de ancho = 2*RH (12 m). 2 carriles por sentido: doble línea central
+    // continua + separadores de carril discontinuos + bordes.
     const c = document.createElement('canvas');
     c.width = 64; c.height = 256;
     const ctx = c.getContext('2d');
     ctx.fillStyle = '#3d4148'; ctx.fillRect(0, 0, 64, 256);
     ctx.fillStyle = '#e8e6df';
-    ctx.fillRect(4, 0, 4, 256); ctx.fillRect(56, 0, 4, 256); // bordes
-    for (let y = 12; y < 256; y += 40) ctx.fillRect(30, y, 4, 22); // centro discontinuo
+    ctx.fillRect(2, 0, 3, 256); ctx.fillRect(59, 0, 3, 256); // bordes
+    ctx.fillRect(29, 0, 2, 256); ctx.fillRect(33, 0, 2, 256); // doble línea central continua
+    for (let y = 10; y < 256; y += 40) { // separadores de carril discontinuos (±3 m)
+      ctx.fillRect(15, y, 2, 22); ctx.fillRect(47, y, 2, 22);
+    }
     const t = new THREE.CanvasTexture(c);
     t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
     return t;
@@ -282,6 +293,16 @@ export class City {
         // STOP para las bocacalles E-W (viaje en X); la calle N-S tiene prioridad
         this.placeSign(group, 'stop', n.x - (RH + 1.4), n.z - RH - 1.2, { x: 1, z: 0 });
         this.placeSign(group, 'stop', n.x + (RH + 1.4), n.z + RH + 1.2, { x: -1, z: 0 });
+      }
+
+      // señal de giro prohibido en cada aproximación de la intersección
+      if (n.restrict) {
+        for (const d of [{ x: 0, z: 1 }, { x: 0, z: -1 }, { x: 1, z: 0 }, { x: -1, z: 0 }]) {
+          const rx = -d.z, rz = d.x; // esquina derecha del que se aproxima
+          this.placeSign(group, n.restrict,
+            n.x - d.x * (RH + 2.2) + rx * (RH + 2.2),
+            n.z - d.z * (RH + 2.2) + rz * (RH + 2.2), d);
+        }
       }
     }
   }
