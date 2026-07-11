@@ -93,6 +93,12 @@ export class Minimap {
       ctx.beginPath();
       this.trackPath.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
       ctx.stroke();
+      // ramal lateral hacia el portal
+      if (this.spur) {
+        const a = this.pc(this.spur[0].x, this.spur[0].z), b = this.pc(this.spur[1].x, this.spur[1].z);
+        ctx.lineWidth = this.trackW * 0.7;
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
     }
 
     // tráfico

@@ -90,13 +90,33 @@ const cityPortal = makePortal(2 * city.roadHalf, 6.5, 0x8b5cff);
 cityPortal.position.set(CITY_PORTAL_X, 0, CITY_PORTAL_Z + 2.5);
 cityGroup.add(cityPortal);
 
-// portal del circuito rural: al otro lado del trazado
-const RURAL_PORTAL_S = ((track.length - 60) % track.length + track.length) % track.length;
+// portal del circuito rural: al final de un ramal lateral que sale del trazado
+const SPUR_S = 40;      // punto del trazado del que arranca el ramal
+const SPUR_LEN = 32;    // longitud del ramal
+const SPUR_HALF = 4.5;  // media anchura del ramal
+const spurPose = track.poseAt(SPUR_S);
+// lado que apunta hacia afuera del circuito (según el centroide del trazado)
+let _cx = 0, _cz = 0, _n = 0;
+for (let i = 0; i < track.samples.length; i += 5) { _cx += track.samples[i].x; _cz += track.samples[i].z; _n++; }
+_cx /= _n || 1; _cz /= _n || 1;
+const outSign = (spurPose.pos.x - _cx) * spurPose.right.x + (spurPose.pos.z - _cz) * spurPose.right.z >= 0 ? 1 : -1;
+const SPUR_DIR = new THREE.Vector3(spurPose.right.x * outSign, 0, spurPose.right.z * outSign).normalize();
+const SPUR_START = new THREE.Vector3(spurPose.pos.x, spurPose.pos.y, spurPose.pos.z);
+const RURAL_PORTAL_POS = SPUR_START.clone().addScaledVector(SPUR_DIR, SPUR_LEN);
 {
-  const rp = track.poseAt(RURAL_PORTAL_S);
-  const p = makePortal(2 * track.roadHalf + 1.5, 6.5, 0x39d98a);
-  p.position.set(rp.pos.x, rp.pos.y, rp.pos.z);
-  p.rotation.y = Math.atan2(rp.tan.x, rp.tan.z);
+  const g = new THREE.Group();
+  g.position.set(SPUR_START.x, SPUR_START.y + 0.02, SPUR_START.z);
+  g.rotation.y = Math.atan2(SPUR_DIR.x, SPUR_DIR.z);
+  const road = new THREE.Mesh(
+    new THREE.PlaneGeometry(2 * SPUR_HALF, SPUR_LEN + 6),
+    new THREE.MeshLambertMaterial({ color: 0x3a3f45 }));
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(0, 0, SPUR_LEN / 2 - 2);
+  g.add(road);
+  ruralGroup.add(g);
+  const p = makePortal(2 * SPUR_HALF + 1, 6.5, 0x39d98a);
+  p.position.set(RURAL_PORTAL_POS.x, RURAL_PORTAL_POS.y, RURAL_PORTAL_POS.z);
+  p.rotation.y = Math.atan2(-SPUR_DIR.x, -SPUR_DIR.z); // de cara al que llega por el ramal
   ruralGroup.add(p);
 }
 
@@ -235,6 +255,7 @@ function configureMap(map, entry) {
     examiner = new CityExam((kind, text) => toast(kind, text));
     lastS = 0;
     minimap.portal = { x: CITY_PORTAL_X, z: CITY_PORTAL_Z };
+    minimap.spur = null;
   } else {
     const s = entry && entry.s != null ? entry.s : 8;
     const start = track.poseAt(s);
@@ -246,8 +267,8 @@ function configureMap(map, entry) {
     traffic.reset();
     peds.reset();
     examiner = new Examiner(track, config.mode, (kind, text) => toast(kind, text));
-    const rp = track.poseAt(RURAL_PORTAL_S);
-    minimap.portal = { x: rp.pos.x, z: rp.pos.z };
+    minimap.portal = { x: RURAL_PORTAL_POS.x, z: RURAL_PORTAL_POS.z };
+    minimap.spur = [{ x: SPUR_START.x, z: SPUR_START.z }, { x: RURAL_PORTAL_POS.x, z: RURAL_PORTAL_POS.z }];
   }
 
   $('examTitle').textContent = isCity
@@ -345,7 +366,7 @@ window.__tp = (x, z, h = 0) => { if (car) { car.placeAt(new THREE.Vector3(x, 0, 
 
 // ganchos de depuración
 window.__trackLen = () => track.length;
-window.__portalS = () => RURAL_PORTAL_S;
+window.__spur = () => ({ sx: SPUR_START.x, sz: SPUR_START.z, dx: SPUR_DIR.x, dz: SPUR_DIR.z, len: SPUR_LEN, px: RURAL_PORTAL_POS.x, pz: RURAL_PORTAL_POS.z });
 window.__lat = () => (car && config.map === 'rural' ? track.project(car.pos, lastS).lat : null);
 
 // gancho de depuración: coloca el coche en un punto s del circuito
@@ -415,27 +436,20 @@ function frame(t) {
       }
       } // fin if (!jumped)
     } else {
-      const oldS = lastS;
       const proj = track.project(car.pos, lastS);
       lastS = proj.s;
-      car.offroad = Math.abs(proj.lat) > track.roadHalf + 0.4;
 
-      // pendiente y altura de la carretera en este punto
-      const tpose = track.poseAt(proj.s);
-      const f0 = car.forward;
-      const dirSign = f0.x * tpose.tan.x + f0.z * tpose.tan.z >= 0 ? 1 : -1;
-      car.slope = tpose.tan.y * dirSign;
-      car.pos.y = tpose.pos.y; // altura exacta de la rasante: nunca por debajo del asfalto
+      // ¿circula por el ramal lateral que lleva al portal?
+      const rx = car.pos.x - SPUR_START.x, rz = car.pos.z - SPUR_START.z;
+      const along = rx * SPUR_DIR.x + rz * SPUR_DIR.z;
+      const side = Math.abs(-rx * SPUR_DIR.z + rz * SPUR_DIR.x);
+      const onSpur = along > 2 && along < SPUR_LEN + 6 && side < SPUR_HALF + 1.5;
 
-      car.update(dt);
-      examiner.update(car, proj, dt);
-
+      // cruzar el portal del final del ramal → ciudad
       let jumped = false;
       if (transitionCd === 0 && config.mode !== 'examen') {
-        const L = track.length, Sp = RURAL_PORTAL_S;
-        const relPrev = ((oldS - Sp) % L + L + L / 2) % L - L / 2;
-        const relCur = ((proj.s - Sp) % L + L + L / 2) % L - L / 2;
-        if (relPrev < 0 && relCur >= 0 && (relCur - relPrev) < 25 && Math.abs(proj.lat) < track.roadHalf + 1) {
+        const ddx = car.pos.x - RURAL_PORTAL_POS.x, ddz = car.pos.z - RURAL_PORTAL_POS.z;
+        if (ddx * ddx + ddz * ddz < 5.5 * 5.5) {
           portalTo('city', {
             pos: new THREE.Vector3(CITY_PORTAL_X + city.lane, 0, CITY_PORTAL_Z - 6),
             heading: Math.PI,
@@ -444,36 +458,56 @@ function frame(t) {
         }
       }
 
-      // peatones y tráfico
-      if (!jumped) {
-      peds.update(dt);
-      const cwBusy = peds.crosswalkBusy();
-      traffic.update(dt, { s: proj.s, lat: proj.lat, speed: car.speed }, cwBusy);
-      collCd = Math.max(0, collCd - dt);
+      if (!jumped && onSpur) {
+        // ramal: calzada plana, sin examinador ni tráfico
+        car.offroad = false;
+        car.slope = 0;
+        car.pos.y = SPUR_START.y;
+        car.update(dt);
+        worldLimit = 50;
+        aheadY = SPUR_START.y;
+      } else if (!jumped) {
+        car.offroad = Math.abs(proj.lat) > track.roadHalf + 0.4;
 
-      const dCw = ((track.crosswalkS - proj.s) % track.length + track.length) % track.length;
-      if (cwBusy && dCw < 16 && car.speed > 2.2) examiner.reportPedestrianYield();
+        // pendiente y altura de la carretera en este punto
+        const tpose = track.poseAt(proj.s);
+        const f0 = car.forward;
+        const dirSign = f0.x * tpose.tan.x + f0.z * tpose.tan.z >= 0 ? 1 : -1;
+        car.slope = tpose.tan.y * dirSign;
+        car.pos.y = tpose.pos.y; // altura exacta de la rasante: nunca por debajo del asfalto
 
-      const fR = car.forward;
-      const rR = new THREE.Vector3(-fR.z, 0, fR.x);
-      for (const p of peds.onRoad()) {
-        const pdx = p.mesh.position.x - car.pos.x, pdz = p.mesh.position.z - car.pos.z;
-        if (pdx * pdx + pdz * pdz < 1.4 * 1.4) { examiner.reportRunOver(); car.speed *= 0.3; }
-      }
-      for (const tc of traffic.cars) {
-        const dx = tc.mesh.position.x - car.pos.x, dz = tc.mesh.position.z - car.pos.z;
-        const df = dx * fR.x + dz * fR.z, dr = dx * rR.x + dz * rR.z;
-        if (Math.abs(df) < 3.9 && Math.abs(dr) < 1.75 && collCd === 0) {
-          collCd = 6; examiner.reportCollision(); car.speed *= -0.2;
+        car.update(dt);
+        examiner.update(car, proj, dt);
+
+        // peatones y tráfico
+        peds.update(dt);
+        const cwBusy = peds.crosswalkBusy();
+        traffic.update(dt, { s: proj.s, lat: proj.lat, speed: car.speed }, cwBusy);
+        collCd = Math.max(0, collCd - dt);
+
+        const dCw = ((track.crosswalkS - proj.s) % track.length + track.length) % track.length;
+        if (cwBusy && dCw < 16 && car.speed > 2.2) examiner.reportPedestrianYield();
+
+        const fR = car.forward;
+        const rR = new THREE.Vector3(-fR.z, 0, fR.x);
+        for (const p of peds.onRoad()) {
+          const pdx = p.mesh.position.x - car.pos.x, pdz = p.mesh.position.z - car.pos.z;
+          if (pdx * pdx + pdz * pdz < 1.4 * 1.4) { examiner.reportRunOver(); car.speed *= 0.3; }
         }
-        if (tc.dir === 1 && car.speed > 9) {
-          const gap = ((tc.s - proj.s) % track.length + track.length) % track.length;
-          if (gap > 4 && gap < car.speed * 0.7 && Math.abs(proj.lat - 1.85) < 1.5) examiner.reportTailgate();
+        for (const tc of traffic.cars) {
+          const dx = tc.mesh.position.x - car.pos.x, dz = tc.mesh.position.z - car.pos.z;
+          const df = dx * fR.x + dz * fR.z, dr = dx * rR.x + dz * rR.z;
+          if (Math.abs(df) < 3.9 && Math.abs(dr) < 1.75 && collCd === 0) {
+            collCd = 6; examiner.reportCollision(); car.speed *= -0.2;
+          }
+          if (tc.dir === 1 && car.speed > 9) {
+            const gap = ((tc.s - proj.s) % track.length + track.length) % track.length;
+            if (gap > 4 && gap < car.speed * 0.7 && Math.abs(proj.lat - 1.85) < 1.5) examiner.reportTailgate();
+          }
         }
+        worldLimit = track.zoneAt(proj.s).limit;
+        aheadY = track.poseAt((proj.s + dirSign * 30 + track.length) % track.length).pos.y;
       }
-      } // fin if (!jumped)
-      worldLimit = track.zoneAt(proj.s).limit;
-      aheadY = track.poseAt((proj.s + dirSign * 30 + track.length) % track.length).pos.y;
     }
 
     // ---- cámara, capó y HUD (común a ambos mapas) ----
