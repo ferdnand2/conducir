@@ -36,7 +36,9 @@ export class CityExam {
     return s > 0 ? 0 : 2;
   }
 
-  // detecta el giro realizado al cruzar una intersección con restricción
+  // detecta el giro realizado al cruzar una intersección: restricción de giro y
+  // uso del intermitente. En este mundo, girar a la izquierda hace crecer heading,
+  // por lo que el giro a la izquierda vale 3 (dir-1) y el de la derecha vale 1 (dir+1).
   checkTurn(car, city) {
     const B = city.B;
     const ni = Math.max(0, Math.min(city.NX - 1, Math.round(car.pos.x / B)));
@@ -44,13 +46,20 @@ export class CityExam {
     const nn = city.nodeAt(ni, nj);
     const inBox = Math.abs(car.pos.x - nn.x) < city.roadHalf + 1.2 &&
                   Math.abs(car.pos.z - nn.z) < city.roadHalf + 1.2;
-    if (inBox && !this.inNode) {
-      this.inNode = { node: nn, enterDir: this.dirOf(car.heading) };
-    } else if (!inBox && this.inNode) {
+    if (inBox) {
+      if (!this.inNode) this.inNode = { node: nn, enterDir: this.dirOf(car.heading), sigL: false, sigR: false };
+      if (car.indicator === 'left') this.inNode.sigL = true;
+      if (car.indicator === 'right') this.inNode.sigR = true;
+    } else if (this.inNode) {
       const turn = (this.dirOf(car.heading) - this.inNode.enterDir + 4) % 4;
       const r = this.inNode.node.restrict;
-      if (r === 'noLeft' && turn === 1) this.fault('deficiente', 'giro', 'Giro prohibido a la izquierda', 12);
-      else if (r === 'noRight' && turn === 3) this.fault('deficiente', 'giro', 'Giro prohibido a la derecha', 12);
+      if (turn === 3) { // giro a la izquierda
+        if (r === 'noLeft') this.fault('deficiente', 'giro', 'Giro prohibido a la izquierda', 12);
+        else if (!this.inNode.sigL) this.fault('leve', 'sig', 'No señalizar el giro con el intermitente', 10);
+      } else if (turn === 1) { // giro a la derecha
+        if (r === 'noRight') this.fault('deficiente', 'giro', 'Giro prohibido a la derecha', 12);
+        else if (!this.inNode.sigR) this.fault('leve', 'sig', 'No señalizar el giro con el intermitente', 10);
+      }
       this.inNode = null;
     }
   }

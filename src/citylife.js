@@ -64,9 +64,9 @@ export class CityTraffic {
   chooseDir(c, i, j) {
     const cands = [];
     const restrict = this.city.nodeAt(i, j)?.restrict;
-    for (const turn of [0, 1, 3]) { // recto, izquierda(+1), derecha(+3)
-      if (restrict === 'noLeft' && turn === 1) continue;
-      if (restrict === 'noRight' && turn === 3) continue;
+    for (const turn of [0, 1, 3]) { // recto; en este mundo +1 = derecha, +3 = izquierda
+      if (restrict === 'noRight' && turn === 1) continue;
+      if (restrict === 'noLeft' && turn === 3) continue;
       const nd = (c.dir + turn) % 4;
       // ¿a qué calle pasa y hasta dónde puede avanzar?
       const naxis = this.axisOf(nd);
