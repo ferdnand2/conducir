@@ -115,6 +115,18 @@ export class Minimap {
       }
     }
 
+    // portal a otro mundo: rombo luminoso
+    if (this.portal) {
+      const q = this.pc(this.portal.x, this.portal.z);
+      ctx.save();
+      ctx.translate(q[0], q[1]); ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#b98bff';
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.strokeStyle = '#efe3ff'; ctx.lineWidth = 1.4;
+      ctx.strokeRect(-4, -4, 8, 8);
+      ctx.restore();
+    }
+
     // conductor: flecha orientada
     const p = this.pc(car.pos.x, car.pos.z);
     // eje X invertido en pc → la componente X de la dirección también se invierte

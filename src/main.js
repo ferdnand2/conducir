@@ -55,6 +55,51 @@ city.buildScene(cityGroup);
 const cityTraffic = new CityTraffic(city, cityGroup);
 const cityPeds = new CityPedestrians(city, cityGroup);
 
+// ---------- portales entre mundos ----------
+function makePortal(width, height, color) {
+  const g = new THREE.Group();
+  const postMat = new THREE.MeshLambertMaterial({ color: 0x272b34 });
+  const postGeo = new THREE.BoxGeometry(0.9, height, 0.9);
+  for (const sx of [-1, 1]) {
+    const p = new THREE.Mesh(postGeo, postMat);
+    p.position.set(sx * width / 2, height / 2, 0); g.add(p);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(width + 1.8, 1.1, 0.9), postMat);
+  beam.position.set(0, height + 0.1, 0); g.add(beam);
+  // superficie luminosa translúcida
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }));
+  glow.position.set(0, height / 2 + 0.5, 0); g.add(glow);
+  // marco luminoso
+  const frameMat = new THREE.MeshBasicMaterial({ color });
+  const vGeo = new THREE.BoxGeometry(0.34, height, 0.34);
+  for (const sx of [-1, 1]) {
+    const b = new THREE.Mesh(vGeo, frameMat);
+    b.position.set(sx * width / 2, height / 2 + 0.5, 0.32); g.add(b);
+  }
+  const top = new THREE.Mesh(new THREE.BoxGeometry(width, 0.34, 0.34), frameMat);
+  top.position.set(0, height + 0.5, 0.32); g.add(top);
+  return g;
+}
+
+// portal de la ciudad: nodo superior central (avenida central, extremo norte)
+const CITY_PORTAL_X = 2 * city.B;
+const CITY_PORTAL_Z = city.maxZ;
+const cityPortal = makePortal(2 * city.roadHalf, 6.5, 0x8b5cff);
+cityPortal.position.set(CITY_PORTAL_X, 0, CITY_PORTAL_Z + 2.5);
+cityGroup.add(cityPortal);
+
+// portal del circuito rural: al otro lado del trazado
+const RURAL_PORTAL_S = ((track.length - 60) % track.length + track.length) % track.length;
+{
+  const rp = track.poseAt(RURAL_PORTAL_S);
+  const p = makePortal(2 * track.roadHalf + 1.5, 6.5, 0x39d98a);
+  p.position.set(rp.pos.x, rp.pos.y, rp.pos.z);
+  p.rotation.y = Math.atan2(rp.tan.x, rp.tan.z);
+  ruralGroup.add(p);
+}
+
 const mirrors = new MirrorSystem(renderer, scene);
 const minimap = new Minimap(document.getElementById('miniCanvas'));
 initStudy();
@@ -78,6 +123,7 @@ let lastS = 0;
 let running = false;
 let gestures = null;
 let collCd = 0;
+let transitionCd = 0; // margen tras cruzar un portal para no re-disparar
 
 // selectores del menú
 for (const [segId, key] of [['segMap', 'map'], ['segMode', 'mode'], ['segCar', 'car'], ['segCtrl', 'ctrl']]) {
@@ -173,32 +219,46 @@ function runCalibration() {
   requestAnimationFrame(step);
 }
 
-function beginDrive() {
-  const isCity = config.map === 'city';
+// Configura el mundo (rural/ciudad) reposicionando el coche. `entry` opcional:
+//   ciudad → { pos, heading } ; rural → { s?, pos?, heading? }
+function configureMap(map, entry) {
+  const isCity = map === 'city';
+  config.map = map;
   ruralGroup.visible = !isCity;
   cityGroup.visible = isCity;
-  car = new Car(config.car);
 
   if (isCity) {
-    car.placeAt(city.startPos.clone(), city.startHeading);
-    car.slope = 0;
+    car.placeAt(entry ? entry.pos : city.startPos.clone(), entry ? entry.heading : city.startHeading);
+    car.slope = 0; car.pos.y = 0;
     cityTraffic.reset();
     cityPeds.reset();
     examiner = new CityExam((kind, text) => toast(kind, text));
+    lastS = 0;
+    minimap.portal = { x: CITY_PORTAL_X, z: CITY_PORTAL_Z };
   } else {
-    const start = track.poseAt(8);
-    const heading = Math.atan2(start.tan.x, start.tan.z);
-    car.placeAt(
-      new THREE.Vector3(start.pos.x + start.right.x * 1.85, 0, start.pos.z + start.right.z * 1.85),
-      heading
-    );
-    lastS = 8;
+    const s = entry && entry.s != null ? entry.s : 8;
+    const start = track.poseAt(s);
+    const heading = entry ? entry.heading : Math.atan2(start.tan.x, start.tan.z);
+    const pos = entry && entry.pos ? entry.pos
+      : new THREE.Vector3(start.pos.x + start.right.x * 1.85, start.pos.y, start.pos.z + start.right.z * 1.85);
+    car.placeAt(pos, heading);
+    lastS = s;
     traffic.reset();
     peds.reset();
     examiner = new Examiner(track, config.mode, (kind, text) => toast(kind, text));
+    const rp = track.poseAt(RURAL_PORTAL_S);
+    minimap.portal = { x: rp.pos.x, z: rp.pos.z };
   }
-  collCd = 0;
 
+  $('examTitle').textContent = isCity
+    ? 'PRÁCTICA · CIUDAD'
+    : config.mode === 'examen' ? 'EXAMEN PRÁCTICO' : 'PRÁCTICA LIBRE';
+  $('progRow').classList.toggle('hidden', isCity);
+  minimap.setWorld(isCity ? 'city' : 'rural', isCity ? city : track);
+}
+
+function beginDrive() {
+  car = new Car(config.car);
   car.onEvent = (ev) => {
     if (ev === 'stall') {
       toast('info', 'Motor calado — pisa el embrague para arrancar');
@@ -209,27 +269,39 @@ function beginDrive() {
       toast('info', ev.slice(4), 2500);
     }
   };
+  collCd = 0;
+  transitionCd = 0;
+  configureMap(config.map, null);
 
   $('examPanel').classList.remove('hidden');
-  $('examTitle').textContent = isCity
-    ? 'PRÁCTICA · CIUDAD'
-    : config.mode === 'examen' ? 'EXAMEN PRÁCTICO' : 'PRÁCTICA LIBRE';
-  $('progRow').classList.toggle('hidden', isCity);
-  minimap.setWorld(isCity ? 'city' : 'rural', isCity ? city : track);
   $('miniCanvas').classList.remove('hidden');
   if (config.ctrl === 'gestos') $('previewCanvas').classList.remove('hidden');
 
-  if (isCity) {
+  if (config.map === 'city') {
     toast('info', 'Ciudad libre: circula por donde quieras, respeta semáforos, stops y señales', 5500);
+    toast('info', '🌀 Sube por la avenida central hasta el portal del norte para pasar al circuito rural', 6800);
   } else {
     toast('info', config.mode === 'examen'
       ? 'Comienza el examen: una vuelta completa al circuito. ¡Suerte!'
       : 'Práctica libre: conduce y respeta las señales', 5000);
+    if (config.mode !== 'examen')
+      toast('info', '🌀 Cruza el portal verde del circuito para volver a la ciudad', 6800);
   }
   if (config.car === 'manual') {
     toast('info', 'Coche manual: embrague + 1ª marcha y acelera suavemente para salir', 6500);
   }
   running = true;
+}
+
+// cambia de mundo al cruzar un portal, conservando el mismo coche
+function portalTo(map, entry) {
+  transitionCd = 3;
+  config.mode = 'practica'; // viajar por portal es siempre práctica libre
+  configureMap(map, entry);
+  collCd = 0;
+  toast('info', map === 'city'
+    ? '🌀 Portal cruzado: bienvenido a la ciudad'
+    : '🌀 Portal cruzado: circuito rural', 4200);
 }
 
 function finishExam() {
@@ -264,11 +336,17 @@ const fmtTime = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padSt
 window.__state = () => ({
   car: car ? { x: car.pos.x, y: car.pos.y, z: car.pos.z, heading: car.heading } : null,
   lastS,
+  map: config.map,
   cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
 });
 
 // gancho de depuración: coloca el coche en coordenadas del mundo (para la ciudad)
 window.__tp = (x, z, h = 0) => { if (car) { car.placeAt(new THREE.Vector3(x, 0, z), h); lastS = 0; } };
+
+// ganchos de depuración
+window.__trackLen = () => track.length;
+window.__portalS = () => RURAL_PORTAL_S;
+window.__lat = () => (car && config.map === 'rural' ? track.project(car.pos, lastS).lat : null);
 
 // gancho de depuración: coloca el coche en un punto s del circuito
 window.__teleport = (s) => {
@@ -292,6 +370,7 @@ function frame(t) {
   if (running && car) {
     const c = controller.poll(dt);
     car.setControls(c);
+    transitionCd = Math.max(0, transitionCd - dt);
 
     let worldLimit = 50, aheadY = 0;
     if (config.map === 'city') {
@@ -304,7 +383,15 @@ function frame(t) {
       examiner.update(car, sample, city, dt);
       worldLimit = sample.limit;
 
+      let jumped = false;
+      if (transitionCd === 0 && car.pos.z > CITY_PORTAL_Z + 2 && car.forward.z > 0.2 &&
+          Math.abs(car.pos.x - CITY_PORTAL_X) < city.roadHalf + 2) {
+        portalTo('rural', null);
+        jumped = true;
+      }
+
       // tráfico y peatones urbanos
+      if (!jumped) {
       cityTraffic.update(dt, { x: car.pos.x, z: car.pos.z });
       cityPeds.update(dt);
       collCd = Math.max(0, collCd - dt);
@@ -326,7 +413,9 @@ function frame(t) {
           examiner.reportPedestrianYield();
         }
       }
+      } // fin if (!jumped)
     } else {
+      const oldS = lastS;
       const proj = track.project(car.pos, lastS);
       lastS = proj.s;
       car.offroad = Math.abs(proj.lat) > track.roadHalf + 0.4;
@@ -341,7 +430,22 @@ function frame(t) {
       car.update(dt);
       examiner.update(car, proj, dt);
 
+      let jumped = false;
+      if (transitionCd === 0 && config.mode !== 'examen') {
+        const L = track.length, Sp = RURAL_PORTAL_S;
+        const relPrev = ((oldS - Sp) % L + L + L / 2) % L - L / 2;
+        const relCur = ((proj.s - Sp) % L + L + L / 2) % L - L / 2;
+        if (relPrev < 0 && relCur >= 0 && (relCur - relPrev) < 25 && Math.abs(proj.lat) < track.roadHalf + 1) {
+          portalTo('city', {
+            pos: new THREE.Vector3(CITY_PORTAL_X + city.lane, 0, CITY_PORTAL_Z - 6),
+            heading: Math.PI,
+          });
+          jumped = true;
+        }
+      }
+
       // peatones y tráfico
+      if (!jumped) {
       peds.update(dt);
       const cwBusy = peds.crosswalkBusy();
       traffic.update(dt, { s: proj.s, lat: proj.lat, speed: car.speed }, cwBusy);
@@ -367,6 +471,7 @@ function frame(t) {
           if (gap > 4 && gap < car.speed * 0.7 && Math.abs(proj.lat - 1.85) < 1.5) examiner.reportTailgate();
         }
       }
+      } // fin if (!jumped)
       worldLimit = track.zoneAt(proj.s).limit;
       aheadY = track.poseAt((proj.s + dirSign * 30 + track.length) % track.length).pos.y;
     }
