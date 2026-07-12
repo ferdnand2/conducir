@@ -13,6 +13,7 @@ import { City } from './city.js';
 import { CityTraffic, CityPedestrians } from './citylife.js';
 import { CityExam } from './exam.js';
 import { initStudy } from './estudio.js';
+import { Weather } from './weather.js';
 
 // ---------- escena ----------
 const container = document.getElementById('gl');
@@ -33,10 +34,17 @@ window.addEventListener('resize', () => {
   mirrors.layout(window.innerWidth, window.innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x5f7a45, 1.0));
+const hemi = new THREE.HemisphereLight(0xcfe4ff, 0x5f7a45, 1.0);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d9, 2.0);
 sun.position.set(300, 420, 150);
 scene.add(sun);
+
+// faros del coche (se encienden de noche/niebla)
+const headlight = new THREE.SpotLight(0xfff2cc, 0, 60, Math.PI * 0.24, 0.5, 1.1);
+scene.add(headlight);
+scene.add(headlight.target);
+let nightMode = false;
 
 // mapa rural (circuito) dentro de un grupo para poder ocultarlo
 const ruralGroup = new THREE.Group();
@@ -122,6 +130,7 @@ const RURAL_PORTAL_POS = SPUR_START.clone().addScaledVector(SPUR_DIR, SPUR_LEN);
 
 const mirrors = new MirrorSystem(renderer, scene);
 const minimap = new Minimap(document.getElementById('miniCanvas'));
+const weather = new Weather(scene, sun, hemi);
 initStudy();
 
 // capó del coche (referencia visual en primera persona)
@@ -135,7 +144,7 @@ scene.add(hood);
 // ---------- estado ----------
 const hud = new HUD(document.getElementById('hudCanvas'));
 const $ = (id) => document.getElementById(id);
-const config = { mode: 'practica', car: 'manual', ctrl: 'gestos', map: 'rural' };
+const config = { mode: 'practica', car: 'manual', ctrl: 'gestos', map: 'rural', weather: 'dia' };
 let controller = null;
 let car = null;
 let examiner = null;
@@ -146,7 +155,7 @@ let collCd = 0;
 let transitionCd = 0; // margen tras cruzar un portal para no re-disparar
 
 // selectores del menú
-for (const [segId, key] of [['segMap', 'map'], ['segMode', 'mode'], ['segCar', 'car'], ['segCtrl', 'ctrl']]) {
+for (const [segId, key] of [['segMap', 'map'], ['segMode', 'mode'], ['segCar', 'car'], ['segCtrl', 'ctrl'], ['segWeather', 'weather']]) {
   $(segId).addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
@@ -292,6 +301,7 @@ function beginDrive() {
   };
   collCd = 0;
   transitionCd = 0;
+  nightMode = weather.apply(config.weather);
   configureMap(config.map, null);
 
   $('examPanel').classList.remove('hidden');
@@ -530,6 +540,16 @@ function frame(t) {
     hood.position.set(car.pos.x + fwd.x * 1.5, car.pos.y + 0.82, car.pos.z + fwd.z * 1.5);
     hood.rotation.y = car.heading;
     hood.rotation.x = -Math.asin(Math.max(-0.5, Math.min(0.5, car.slope)));
+
+    // faros y lluvia
+    weather.update(dt, camera.position);
+    if (nightMode) {
+      headlight.intensity = 6;
+      headlight.position.set(car.pos.x + fwd.x * 1.2, car.pos.y + 1.0, car.pos.z + fwd.z * 1.2);
+      headlight.target.position.set(car.pos.x + fwd.x * 26, car.pos.y - 1, car.pos.z + fwd.z * 26);
+    } else {
+      headlight.intensity = 0;
+    }
 
     hud.draw(car, worldLimit, dt);
     if (config.map === 'city') minimap.render(car, { traffic: cityTraffic.cars, peds: cityPeds.peds });

@@ -38,23 +38,25 @@ export class CityTraffic {
     return this.axisOf(c.dir) === 'h' ? { x: c.t, z: p } : { x: p, z: c.t };
   }
 
-  reset() {
+  respawnCar(c) {
     const { NX, NZ } = this.city;
-    for (const c of this.cars) {
-      c.dir = Math.floor(Math.random() * 4);
-      if (this.axisOf(c.dir) === 'v') {
-        c.line = 1 + Math.floor(Math.random() * (NX - 2));
-        c.t = (0.3 + Math.random() * (NZ - 1.6)) * this.B;
-      } else {
-        c.line = 1 + Math.floor(Math.random() * (NZ - 2));
-        c.t = (0.3 + Math.random() * (NX - 1.6)) * this.B;
-      }
-      c.speed = 6; c.wait = 0;
-      c.heading = Math.atan2(DIR[c.dir].x, DIR[c.dir].z);
-      const w = this.worldPos(c);
-      c.mesh.position.set(w.x, 0, w.z);
-      c.mesh.rotation.y = c.heading;
+    c.dir = Math.floor(Math.random() * 4);
+    if (this.axisOf(c.dir) === 'v') {
+      c.line = 1 + Math.floor(Math.random() * (NX - 2));
+      c.t = (0.3 + Math.random() * (NZ - 1.6)) * this.B;
+    } else {
+      c.line = 1 + Math.floor(Math.random() * (NZ - 2));
+      c.t = (0.3 + Math.random() * (NX - 1.6)) * this.B;
     }
+    c.speed = 6; c.wait = 0; c.stuck = 0;
+    c.heading = Math.atan2(DIR[c.dir].x, DIR[c.dir].z);
+    const w = this.worldPos(c);
+    c.mesh.position.set(w.x, 0, w.z);
+    c.mesh.rotation.y = c.heading;
+  }
+
+  reset() {
+    for (const c of this.cars) this.respawnCar(c);
   }
 
   // índice de la última intersección en cada eje
@@ -121,7 +123,7 @@ export class CityTraffic {
         if (along > 0 && lateral < 1.6) gapAhead = Math.min(gapAhead, along);
       };
       for (const o of this.cars) {
-        if (o === c) continue;
+        if (o === c || o.dir !== c.dir) continue; // solo el mismo sentido, evita bloqueos mutuos
         checkAhead(o.mesh.position.x, o.mesh.position.z);
       }
       if (player) checkAhead(player.x, player.z);
@@ -158,6 +160,10 @@ export class CityTraffic {
       while (dh < -Math.PI) dh += 2 * Math.PI;
       c.heading += dh * Math.min(1, dt * 9);
       c.mesh.rotation.y = c.heading;
+
+      // red de seguridad anti-bloqueo: si lleva mucho parado, reubícalo
+      c.stuck = c.speed < 0.4 ? (c.stuck || 0) + dt : 0;
+      if (c.stuck > 14) this.respawnCar(c);
     }
   }
 }
