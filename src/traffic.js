@@ -69,7 +69,7 @@ export class TrafficManager {
         // no embiste al jugador si lo tiene delante en su carril
         if (player) {
           const gap = ((player.s - c.s) % L + L) % L;
-          if (gap < 45 && Math.abs(player.lat - 1.85) < 1.8) {
+          if (gap < 45 && Math.abs(player.lat - T.laneOut) < 2.2) {
             if (gap < 12) target = 0;
             else target = Math.min(target, Math.max(0, player.speed - (30 - gap) * 0.08));
           }
@@ -84,7 +84,7 @@ export class TrafficManager {
       c.s = ((c.s + c.dir * c.speed * dt) % L + L) % L;
 
       const pose = T.poseAt(c.s);
-      const lane = 1.85 * c.dir; // su carril derecho
+      const lane = T.laneOut * c.dir; // su carril exterior
       c.mesh.position.set(
         pose.pos.x + pose.right.x * lane,
         pose.pos.y,

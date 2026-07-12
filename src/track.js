@@ -3,7 +3,9 @@
 import * as THREE from 'three';
 import { createSign } from './signals.js';
 
-const ROAD_HALF = 3.7; // media calzada (2 carriles de 3,2 m + arcén)
+const ROAD_HALF = 6.0; // media calzada (2 carriles de 3 m por sentido)
+const LANE_OUT = 4.5;  // centro del carril exterior (circulación normal)
+const LANE_IN = 1.5;   // centro del carril interior (adelantar sin invadir el contrario)
 
 // [x, z, y] — y = altura (subidas y bajadas)
 const CONTROL_POINTS = [
@@ -35,6 +37,8 @@ export class Track {
     );
     this.length = this.curve.getLength();
     this.roadHalf = ROAD_HALF;
+    this.laneOut = LANE_OUT;
+    this.laneIn = LANE_IN;
 
     this.N = 2400;
     this.samples = this.curve.getSpacedPoints(this.N);
@@ -229,9 +233,11 @@ export class Track {
       ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
     }
     ctx.fillStyle = '#e8e6df';
-    ctx.fillRect(125, 10, 6, 118);   // línea central discontinua
-    ctx.fillRect(14, 0, 5, 256);     // bordes continuos
-    ctx.fillRect(237, 0, 5, 256);
+    ctx.fillRect(10, 0, 5, 256); ctx.fillRect(241, 0, 5, 256);   // bordes continuos
+    ctx.fillRect(122, 0, 4, 256); ctx.fillRect(130, 0, 4, 256);  // doble línea central continua
+    for (let y = 8; y < 256; y += 40) {                          // separadores de carril discontinuos
+      ctx.fillRect(62, y, 4, 22); ctx.fillRect(190, y, 4, 22);
+    }
     return new THREE.CanvasTexture(c);
   }
 
@@ -269,12 +275,12 @@ export class Track {
   buildCrosswalk(scene) {
     const { pos, tan, right } = this.poseAt(this.crosswalkS);
     const mat = new THREE.MeshBasicMaterial({ color: 0xe8e6df });
-    for (let k = -3; k <= 3; k++) {
-      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 3), mat);
+    for (let k = -5; k <= 5; k++) {
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 4), mat);
       stripe.rotation.x = -Math.PI / 2;
       stripe.rotation.z = -Math.atan2(tan.x, tan.z);
       stripe.position.set(
-        pos.x + right.x * k, pos.y + 0.035, pos.z + right.z * k
+        pos.x + right.x * (k * 1.05), pos.y + 0.035, pos.z + right.z * (k * 1.05)
       );
       scene.add(stripe);
     }
@@ -301,12 +307,12 @@ export class Track {
     // línea de detención (carril derecho)
     const lp = this.poseAt(this.stopLineS);
     const line = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.3, 0.5),
+      new THREE.PlaneGeometry(5.4, 0.5),
       new THREE.MeshBasicMaterial({ color: 0xe8e6df })
     );
     line.rotation.x = -Math.PI / 2;
     line.rotation.z = -Math.atan2(lp.tan.x, lp.tan.z);
-    line.position.set(lp.pos.x + lp.right.x * 1.85, lp.pos.y + 0.03, lp.pos.z + lp.right.z * 1.85);
+    line.position.set(lp.pos.x + lp.right.x * 3, lp.pos.y + 0.03, lp.pos.z + lp.right.z * 3);
     scene.add(line);
 
     // ramal que se incorpora en el ceda final: llega por la derecha, hacia atrás

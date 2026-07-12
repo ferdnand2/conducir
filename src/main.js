@@ -270,7 +270,7 @@ function configureMap(map, entry) {
     const start = track.poseAt(s);
     const heading = entry ? entry.heading : Math.atan2(start.tan.x, start.tan.z);
     const pos = entry && entry.pos ? entry.pos
-      : new THREE.Vector3(start.pos.x + start.right.x * 1.85, start.pos.y, start.pos.z + start.right.z * 1.85);
+      : new THREE.Vector3(start.pos.x + start.right.x * track.laneOut, start.pos.y, start.pos.z + start.right.z * track.laneOut);
     car.placeAt(pos, heading);
     lastS = s;
     traffic.reset();
@@ -384,7 +384,7 @@ window.__teleport = (s) => {
   if (!car) return;
   const p = track.poseAt(s);
   car.placeAt(
-    new THREE.Vector3(p.pos.x + p.right.x * 1.85, p.pos.y, p.pos.z + p.right.z * 1.85),
+    new THREE.Vector3(p.pos.x + p.right.x * track.laneOut, p.pos.y, p.pos.z + p.right.z * track.laneOut),
     Math.atan2(p.tan.x, p.tan.z)
   );
   lastS = s;
@@ -512,7 +512,7 @@ function frame(t) {
           }
           if (tc.dir === 1 && car.speed > 9) {
             const gap = ((tc.s - proj.s) % track.length + track.length) % track.length;
-            if (gap > 4 && gap < car.speed * 0.7 && Math.abs(proj.lat - 1.85) < 1.5) examiner.reportTailgate();
+            if (gap > 4 && gap < car.speed * 0.7 && Math.abs(proj.lat - track.laneOut) < 1.8) examiner.reportTailgate();
           }
         }
         worldLimit = track.zoneAt(proj.s).limit;
