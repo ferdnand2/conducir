@@ -177,6 +177,16 @@
       position: absolute; left: 224px; bottom: 18px; z-index: 11; color: #ffd43b;
       font-size: 0.85rem; background: rgba(16,22,36,0.7); padding: 6px 12px; border-radius: 8px;
     }
+    #beltBanner {
+      position: absolute; left: 50%; transform: translateX(-50%); bottom: 158px; z-index: 16;
+      display: flex; align-items: center; gap: 12px; padding: 11px 20px; border-radius: 12px;
+      background: rgba(214,51,108,0.94); color: #fff; font-weight: 700;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    }
+    #beltBanner button {
+      background: #fff; color: #b02a54; border: none; border-radius: 8px; padding: 8px 15px;
+      font-weight: 700; cursor: pointer; font-size: 0.92rem;
+    }
     #miniCanvas {
       position: absolute; right: 14px; bottom: 14px; width: 190px; height: 190px;
       z-index: 11; border-radius: 10px; border: 2px solid rgba(255,255,255,0.22);
@@ -192,6 +202,9 @@
   <canvas id="miniCanvas" width="200" height="200" class="hidden"></canvas>
   <div id="trackStatus" class="hidden">⚠ Manos no detectadas</div>
   <div id="toasts"></div>
+  <div id="beltBanner" class="hidden">🔴 Abróchate el cinturón antes de arrancar
+    <button id="beltBtn">Abrochar (tecla B)</button>
+  </div>
 
   <div id="examPanel" class="hidden">
     <div class="title" id="examTitle">EXAMEN</div>

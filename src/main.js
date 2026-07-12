@@ -153,6 +153,14 @@ let running = false;
 let gestures = null;
 let collCd = 0;
 let transitionCd = 0; // margen tras cruzar un portal para no re-disparar
+let seatbelt = false;
+
+function fastenBelt() {
+  if (!running || seatbelt) return;
+  seatbelt = true;
+  $('beltBanner').classList.add('hidden');
+  toast('info', 'Cinturón abrochado ✔');
+}
 
 // selectores del menú
 for (const [segId, key] of [['segMap', 'map'], ['segMode', 'mode'], ['segCar', 'car'], ['segCtrl', 'ctrl'], ['segWeather', 'weather']]) {
@@ -186,8 +194,10 @@ for (const [id, key, valId] of [
 $('startBtn').addEventListener('click', startFlow);
 $('retryBtn').addEventListener('click', () => { $('results').classList.add('hidden'); beginDrive(); });
 $('menuBtn').addEventListener('click', () => { $('results').classList.add('hidden'); showMenu(); });
+$('beltBtn').addEventListener('click', fastenBelt);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && running) showMenu();
+  if (e.code === 'KeyB' && running) fastenBelt();
 });
 
 function showMenu() {
@@ -197,6 +207,7 @@ function showMenu() {
   $('previewCanvas').classList.add('hidden');
   $('miniCanvas').classList.add('hidden');
   $('trackStatus').classList.add('hidden');
+  $('beltBanner').classList.add('hidden');
   if (gestures) { gestures.dispose(); gestures = null; }
 }
 
@@ -301,10 +312,12 @@ function beginDrive() {
   };
   collCd = 0;
   transitionCd = 0;
+  seatbelt = false;
   nightMode = weather.apply(config.weather);
   configureMap(config.map, null);
 
   $('examPanel').classList.remove('hidden');
+  $('beltBanner').classList.remove('hidden');
   $('miniCanvas').classList.remove('hidden');
   if (config.ctrl === 'gestos') $('previewCanvas').classList.remove('hidden');
 
@@ -549,6 +562,10 @@ function frame(t) {
       headlight.target.position.set(car.pos.x + fwd.x * 26, car.pos.y - 1, car.pos.z + fwd.z * 26);
     } else {
       headlight.intensity = 0;
+    }
+
+    if (!seatbelt && Math.abs(car.speed) > 2) {
+      examiner.fault('deficiente', 'cinturon', 'Circular sin el cinturón abrochado', 999);
     }
 
     hud.draw(car, worldLimit, dt);
