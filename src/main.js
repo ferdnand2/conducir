@@ -495,17 +495,26 @@ function frame(t) {
         worldLimit = 50;
         aheadY = SPUR_START.y;
       } else if (!jumped) {
-        car.offroad = Math.abs(proj.lat) > track.roadHalf + 0.4;
-
-        // pendiente y altura de la carretera en este punto
-        const tpose = track.poseAt(proj.s);
-        const f0 = car.forward;
-        const dirSign = f0.x * tpose.tan.x + f0.z * tpose.tan.z >= 0 ? 1 : -1;
-        car.slope = tpose.tan.y * dirSign;
-        car.pos.y = tpose.pos.y; // altura exacta de la rasante: nunca por debajo del asfalto
+        const rz = track.roundaboutZone(car.pos);
+        const inRound = rz.inZone;
+        let dirSign = 1;
+        if (inRound) {
+          // dentro de la rotonda: se circula libremente por el anillo (sin faltas de posición)
+          car.offroad = rz.dist < track.islandR + 0.5; // solo la isleta es "fuera"
+          car.slope = 0;
+          car.pos.y = 0;
+        } else {
+          car.offroad = Math.abs(proj.lat) > track.roadHalf + 0.4;
+          // pendiente y altura de la carretera en este punto
+          const tpose = track.poseAt(proj.s);
+          const f0 = car.forward;
+          dirSign = f0.x * tpose.tan.x + f0.z * tpose.tan.z >= 0 ? 1 : -1;
+          car.slope = tpose.tan.y * dirSign;
+          car.pos.y = tpose.pos.y; // altura exacta de la rasante: nunca por debajo del asfalto
+        }
 
         car.update(dt);
-        examiner.update(car, proj, dt);
+        examiner.update(car, proj, dt, inRound);
 
         // peatones y tráfico
         peds.update(dt);
@@ -528,13 +537,18 @@ function frame(t) {
           if (Math.abs(df) < 3.9 && Math.abs(dr) < 1.75 && collCd === 0) {
             collCd = 6; examiner.reportCollision(); car.speed *= -0.2;
           }
-          if (tc.dir === 1 && car.speed > 9) {
+          if (!inRound && tc.dir === 1 && car.speed > 9) {
             const gap = ((tc.s - proj.s) % track.length + track.length) % track.length;
             if (gap > 4 && gap < car.speed * 0.7 && Math.abs(proj.lat - track.laneOut) < 1.8) examiner.reportTailgate();
           }
         }
-        worldLimit = track.zoneAt(proj.s).limit;
-        aheadY = track.poseAt((proj.s + dirSign * 30 + track.length) % track.length).pos.y;
+        if (inRound) {
+          worldLimit = 40;
+          aheadY = 0;
+        } else {
+          worldLimit = track.zoneAt(proj.s).limit;
+          aheadY = track.poseAt((proj.s + dirSign * 30 + track.length) % track.length).pos.y;
+        }
       }
     }
 

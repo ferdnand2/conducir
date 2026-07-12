@@ -10,31 +10,33 @@ const LANE_IN = 1.5;   // centro del carril interior (adelantar sin invadir el c
 // Trazado en forma de 8: dos lóbulos (oeste y este) unidos por una rotonda central
 // que se atraviesa DOS veces por vuelta (arco sur y arco norte, isleta en medio).
 // [x, z, y] — y = altura (subidas y bajadas)
+// Rotonda central real (anillo circular de radio RING_R) usada como intersección de
+// un 8: el trazado la recorre en dos semicírculos (norte y sur) que juntos cierran el
+// círculo, con un lóbulo a cada lado. Dentro de la rotonda se circula libremente.
+const RING_R = 30;   // radio de la línea central del anillo
 const CONTROL_POINTS = [
-  // --- arranca en la recta baja del lóbulo ESTE (recta de 90) ---
-  [640, 100, 0],
-  [850, 45, 5],
-  [1070, 110, 12],
-  [1150, 250, 16],   // alto del lóbulo este
-  [1070, 390, 12],
-  [850, 455, 5],
-  [640, 400, 0],
-  [545, 278, 0],     // garganta noreste
-  // --- arco NORTE de la rotonda (pasa por encima de la isleta) ---
-  [520, 290, 0], [500, 294, 0], [480, 290, 0],
-  [455, 278, 0],     // garganta noroeste
+  // --- lóbulo ESTE (arranca en su recta) ---
+  [860, 90, 6],
+  [1080, 170, 12],
+  [1150, 300, 14],   // alto del lóbulo este
+  [1010, 420, 8],
+  [780, 430, 3],
+  [600, 360, 0],
+  [529.9, 252.6, 0],  // anillo 5° — entra a la rotonda (semicírculo NORTE)
+  [521.2, 271.2, 0], [500, 280, 0], [478.8, 271.2, 0],
+  [470.1, 252.6, 0],  // anillo 175° — sale hacia el lóbulo oeste
   // --- lóbulo OESTE ---
-  [360, 400, 0],
-  [150, 455, 4],
-  [-70, 390, 14],
-  [-150, 250, 20],   // cima del lóbulo oeste
-  [-70, 110, 14],
-  [150, 45, 0],
-  [360, 100, 0],
-  [455, 222, 0],     // garganta suroeste
-  // --- arco SUR de la rotonda (pasa por debajo de la isleta) ---
-  [480, 210, 0], [500, 206, 0], [520, 210, 0],
-  [545, 222, 0],     // garganta sureste (cierra hacia la recta este)
+  [400, 360, 0],
+  [180, 440, 5],
+  [-40, 380, 15],
+  [-120, 250, 20],    // cima del lóbulo oeste
+  [-40, 120, 15],
+  [180, 60, 5],
+  [400, 140, 0],
+  [470.1, 247.4, 0],  // anillo 185° — entra a la rotonda (semicírculo SUR)
+  [478.8, 228.8, 0], [500, 220, 0], [521.2, 228.8, 0],
+  [529.9, 247.4, 0],  // anillo 355° — sale hacia el lóbulo este
+  [640, 160, 0],      // cierra hacia la recta del lóbulo este
 ];
 
 const ROUNDABOUT_CENTER = new THREE.Vector3(500, 0, 250);
@@ -55,18 +57,19 @@ export class Track {
     this.step = this.length / this.N;
     this.buildSpeedCaps();
 
-    // puntos clave sobre el trazado en 8 (dos pasadas por la rotonda)
-    const sRotSE = this.findS(462, 232);   // entrada al arco sur (desde el lóbulo oeste)
-    const sRotSX = this.findS(538, 232);   // salida del arco sur
-    const sRotNE = this.findS(538, 268);   // entrada al arco norte (desde el lóbulo este)
-    const sRotNX = this.findS(462, 268);   // salida del arco norte
-    this.rotEntryS = (sRotSE - 14 + this.length) % this.length;
-    this.rotExitS = sRotSX;
-    this.rotEntryS2 = (sRotNE - 14 + this.length) % this.length;
-    this.rotExitS2 = sRotNX;
+    // rotonda central (círculo real por el que se circula)
+    this.ringR = RING_R;
+    this.islandR = 22;
+    this.roundZoneR = RING_R + 12;   // radio de la "zona rotonda" (circulación libre)
 
-    // travesía urbana en el fondo del lóbulo oeste
-    const sTownStart = this.findS(60, 82);
+    // puntos clave sobre el trazado en 8 (dos entradas a la rotonda)
+    this.rotEntryS = (this.findS(529.9, 252.6) - 14 + this.length) % this.length; // entrada norte
+    this.rotExitS = this.findS(470.1, 252.6);
+    this.rotEntryS2 = (this.findS(470.1, 247.4) - 14 + this.length) % this.length; // entrada sur
+    this.rotExitS2 = this.findS(529.9, 247.4);
+
+    // travesía urbana en el lóbulo oeste
+    const sTownStart = this.findS(150, 62);
     const sTownEnd = this.findS(400, 140);
     const sStop = (sTownStart + sTownEnd) / 2;
     this.stopS = sStop;
@@ -74,10 +77,10 @@ export class Track {
     this.crosswalkS = sTownStart + (sTownEnd - sTownStart) * 0.3;
 
     // ceda: incorporación por un ramal en la parte alta del lóbulo oeste
-    this.cedaS = (this.findS(150, 455) - 6 + this.length) % this.length;
+    this.cedaS = (this.findS(180, 440) - 6 + this.length) % this.length;
 
-    const sSummit = this.findS(-150, 250);   // cima del lóbulo oeste
-    const sEastHill = this.findS(1150, 250);  // alto del lóbulo este
+    const sSummit = this.findS(-120, 250);   // cima del lóbulo oeste
+    const sEastHill = this.findS(1150, 300);  // alto del lóbulo este
 
     this.zones = [
       { s0: 0, s1: sTownStart, limit: 90, urban: false },
@@ -150,6 +153,13 @@ export class Track {
   speedCapAt(s) {
     const i = ((Math.round(s / this.step) % this.N) + this.N) % this.N;
     return this.caps[i];
+  }
+
+  // ¿está el coche dentro de la rotonda? (para circular libremente por el anillo)
+  roundaboutZone(pos) {
+    const dx = pos.x - ROUNDABOUT_CENTER.x, dz = pos.z - ROUNDABOUT_CENTER.z;
+    const dist = Math.hypot(dx, dz);
+    return { inZone: dist < this.roundZoneR, dist };
   }
 
   poseAt(s) {
@@ -345,41 +355,56 @@ export class Track {
 
   buildRoundabout(scene) {
     const C = ROUNDABOUT_CENTER;
-    // explanada asfaltada de la rotonda (bajo los arcos y las gargantas)
-    const apron = new THREE.Mesh(
-      new THREE.CircleGeometry(50, 56),
-      new THREE.MeshLambertMaterial({ color: 0x3d4148 })
+    const R = this.ringR, IR = this.islandR, H = this.roadHalf;
+
+    // calzada anular completa (el anillo circular por el que se circula)
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(R - H, R + H, 64),
+      new THREE.MeshLambertMaterial({ color: 0x3d4148, side: THREE.DoubleSide })
     );
-    apron.rotation.x = -Math.PI / 2;
-    apron.position.set(C.x, 0.006, C.z);
-    scene.add(apron);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(C.x, 0.012, C.z);
+    scene.add(ring);
+
+    // línea central discontinua del anillo (separador de los dos carriles)
+    const laneMat = new THREE.MeshBasicMaterial({ color: 0xe8e6df });
+    const dashes = 40;
+    for (let i = 0; i < dashes; i++) {
+      const a = (i / dashes) * Math.PI * 2;
+      if (i % 2) continue;
+      const seg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), laneMat);
+      seg.rotation.x = -Math.PI / 2;
+      seg.rotation.z = -a;
+      seg.position.set(C.x + Math.cos(a) * R, 0.02, C.z + Math.sin(a) * R);
+      scene.add(seg);
+    }
 
     // bordillo e isleta central
     const curb = new THREE.Mesh(
-      new THREE.CylinderGeometry(36, 36, 0.26, 56),
+      new THREE.CylinderGeometry(IR + 0.8, IR + 0.8, 0.28, 56),
       new THREE.MeshLambertMaterial({ color: 0xb7bcc4 })
     );
-    curb.position.set(C.x, 0.13, C.z);
+    curb.position.set(C.x, 0.14, C.z);
     scene.add(curb);
     const island = new THREE.Mesh(
-      new THREE.CylinderGeometry(35, 35, 0.32, 56),
+      new THREE.CylinderGeometry(IR, IR, 0.34, 56),
       new THREE.MeshLambertMaterial({ color: 0x5c8f43 })
     );
-    island.position.set(C.x, 0.26, C.z);
+    island.position.set(C.x, 0.28, C.z);
     scene.add(island);
 
     // vegetación decorativa en la isleta
-    for (const [ox, oz] of [[0, 0], [-16, 11], [14, -12], [11, 14], [-12, -14]]) {
+    for (const [ox, oz] of [[0, 0], [-11, 8], [10, -9], [8, 11], [-9, -10], [13, 6]]) {
       const trunk = new THREE.Mesh(
         new THREE.CylinderGeometry(0.22, 0.3, 2.2, 6),
         new THREE.MeshLambertMaterial({ color: 0x6b4a2b })
       );
-      trunk.position.set(C.x + ox, 1.35, C.z + oz);
+      trunk.position.set(C.x + ox, 1.4, C.z + oz);
       const crown = new THREE.Mesh(
         new THREE.ConeGeometry(2.4, 4.6, 7),
         new THREE.MeshLambertMaterial({ color: 0x2e6b34 })
       );
-      crown.position.set(C.x + ox, 4.3, C.z + oz);
+      crown.position.set(C.x + ox, 4.4, C.z + oz);
       scene.add(trunk, crown);
     }
   }

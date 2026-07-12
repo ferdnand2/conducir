@@ -180,7 +180,7 @@ export class Examiner {
     this.fault('leve', 'distancia', 'No guardar la distancia de seguridad', 15);
   }
 
-  update(car, proj, dt) {
+  update(car, proj, dt, inRound = false) {
     if (this.finished) return;
     this.time += dt;
     this.distance += Math.abs(car.speed) * dt;
@@ -212,17 +212,21 @@ export class Examiner {
       this.timers.overspeedE = 0;
     }
 
-    // ---- posición en la calzada ----
-    const absLat = Math.abs(lat);
-    if (absLat > half + 2.5) {
-      this.fault('eliminatoria', 'road-e', 'Abandonar la calzada', 18);
-    } else if (absLat > half + 0.6) {
-      this.fault('deficiente', 'road-d', 'Salirse de la vía / invadir el arcén', 10);
-    }
-    if (lat < -0.6 && car.speed > 2) {
-      this.timers.wrongside += dt;
-      if (this.timers.wrongside > 2.5)
-        this.fault('deficiente', 'side-d', 'Circular por el carril del sentido contrario', 12);
+    // ---- posición en la calzada (no aplica dentro de la rotonda) ----
+    if (!inRound) {
+      const absLat = Math.abs(lat);
+      if (absLat > half + 2.5) {
+        this.fault('eliminatoria', 'road-e', 'Abandonar la calzada', 18);
+      } else if (absLat > half + 0.6) {
+        this.fault('deficiente', 'road-d', 'Salirse de la vía / invadir el arcén', 10);
+      }
+      if (lat < -0.6 && car.speed > 2) {
+        this.timers.wrongside += dt;
+        if (this.timers.wrongside > 2.5)
+          this.fault('deficiente', 'side-d', 'Circular por el carril del sentido contrario', 12);
+      } else {
+        this.timers.wrongside = 0;
+      }
     } else {
       this.timers.wrongside = 0;
     }
