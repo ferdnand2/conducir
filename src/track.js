@@ -7,27 +7,37 @@ const ROAD_HALF = 6.0; // media calzada (2 carriles de 3 m por sentido)
 const LANE_OUT = 4.5;  // centro del carril exterior (circulación normal)
 const LANE_IN = 1.5;   // centro del carril interior (adelantar sin invadir el contrario)
 
+// Trazado en forma de 8: dos lóbulos (oeste y este) unidos por una rotonda central
+// que se atraviesa DOS veces por vuelta (arco sur y arco norte, isleta en medio).
 // [x, z, y] — y = altura (subidas y bajadas)
 const CONTROL_POINTS = [
-  [0, -150, 0], [0, 100, 0], [0, 350, 4], [0, 560, 14],       // recta inicial, empieza a subir
-  [60, 760, 24], [180, 920, 30], [340, 1010, 30],              // curva izquierda en subida, cima
-  [520, 1070, 16], [700, 1080, 4],                             // bajada
-  [880, 1080, 0], [1050, 1080, 0], [1220, 1060, 0],            // travesía urbana (llano)
-  [1350, 990, 0], [1430, 860, 0],                              // salida del pueblo
-  [1430, 800, 0], [1432, 740, 0], [1436, 714, 0],              // aproximación: deflexión a la derecha
-  [1438.6, 702.3, 0], [1443.0, 697.5, 0], [1445.0, 690.0, 0],  // arco del anillo (R=15,
-  [1443.0, 682.5, 0], [1438.6, 677.7, 0],                      //  isleta a la izquierda)
-  [1436, 666, 0], [1432, 640, 0], [1430, 600, 0], [1430, 560, 0], // salida hacia el sur
-  [1400, 430, 5], [1300, 330, 12], [1140, 300, 8],             // curvas con ondulaciones
-  [980, 340, 14], [820, 290, 8], [660, 330, 3],
-  [500, 250, 7], [340, 290, 3], [170, 190, 0],
-  // regreso por el sur: baja en paralelo por el este, rodea un arco amplio
-  // (radio ~50 m) y se incorpora ALINEADO con la recta inicial
-  [110, 40, 0], [110, -100, 0], [95, -185, 0],
-  [50, -235, 0], [10, -195, 0],
+  // --- arranca en la recta baja del lóbulo ESTE (recta de 90) ---
+  [640, 100, 0],
+  [850, 45, 5],
+  [1070, 110, 12],
+  [1150, 250, 16],   // alto del lóbulo este
+  [1070, 390, 12],
+  [850, 455, 5],
+  [640, 400, 0],
+  [545, 278, 0],     // garganta noreste
+  // --- arco NORTE de la rotonda (pasa por encima de la isleta) ---
+  [520, 290, 0], [500, 294, 0], [480, 290, 0],
+  [455, 278, 0],     // garganta noroeste
+  // --- lóbulo OESTE ---
+  [360, 400, 0],
+  [150, 455, 4],
+  [-70, 390, 14],
+  [-150, 250, 20],   // cima del lóbulo oeste
+  [-70, 110, 14],
+  [150, 45, 0],
+  [360, 100, 0],
+  [455, 222, 0],     // garganta suroeste
+  // --- arco SUR de la rotonda (pasa por debajo de la isleta) ---
+  [480, 210, 0], [500, 206, 0], [520, 210, 0],
+  [545, 222, 0],     // garganta sureste (cierra hacia la recta este)
 ];
 
-const ROUNDABOUT_CENTER = new THREE.Vector3(1430, 0, 690);
+const ROUNDABOUT_CENTER = new THREE.Vector3(500, 0, 250);
 
 export class Track {
   constructor() {
@@ -45,54 +55,59 @@ export class Track {
     this.step = this.length / this.N;
     this.buildSpeedCaps();
 
-    // puntos clave localizados sobre la curva real
-    const sTownStart = this.findS(880, 1080);
-    const sStop = this.findS(1050, 1080);
-    const s30 = this.findS(1220, 1060);
-    const sTownEnd = this.findS(1350, 990);
-    this.rotEntryS = this.findS(1443, 697.5) - 8;
-    this.rotExitS = this.findS(1438.6, 677.7);
-    // incorporación a la recta inicial, justo tras la horquilla sur
-    this.cedaS = (this.findS(0, -150) - 25 + this.length) % this.length;
-    this.horseshoeS = this.findS(50, -235);
-    const sCurve1 = this.findS(0, 560);
-    const sSummit = this.findS(340, 1010);
+    // puntos clave sobre el trazado en 8 (dos pasadas por la rotonda)
+    const sRotSE = this.findS(462, 232);   // entrada al arco sur (desde el lóbulo oeste)
+    const sRotSX = this.findS(538, 232);   // salida del arco sur
+    const sRotNE = this.findS(538, 268);   // entrada al arco norte (desde el lóbulo este)
+    const sRotNX = this.findS(462, 268);   // salida del arco norte
+    this.rotEntryS = (sRotSE - 14 + this.length) % this.length;
+    this.rotExitS = sRotSX;
+    this.rotEntryS2 = (sRotNE - 14 + this.length) % this.length;
+    this.rotExitS2 = sRotNX;
 
+    // travesía urbana en el fondo del lóbulo oeste
+    const sTownStart = this.findS(60, 82);
+    const sTownEnd = this.findS(400, 140);
+    const sStop = (sTownStart + sTownEnd) / 2;
     this.stopS = sStop;
     this.stopLineS = sStop - 4.5;
+    this.crosswalkS = sTownStart + (sTownEnd - sTownStart) * 0.3;
+
+    // ceda: incorporación por un ramal en la parte alta del lóbulo oeste
+    this.cedaS = (this.findS(150, 455) - 6 + this.length) % this.length;
+
+    const sSummit = this.findS(-150, 250);   // cima del lóbulo oeste
+    const sEastHill = this.findS(1150, 250);  // alto del lóbulo este
 
     this.zones = [
       { s0: 0, s1: sTownStart, limit: 90, urban: false },
-      { s0: sTownStart, s1: s30, limit: 50, urban: true },
-      { s0: s30, s1: sTownEnd + 40, limit: 30, urban: true },
-      { s0: sTownEnd + 40, s1: this.length, limit: 90, urban: false },
+      { s0: sTownStart, s1: sStop, limit: 50, urban: true },
+      { s0: sStop, s1: sTownEnd, limit: 30, urban: true },
+      { s0: sTownEnd, s1: this.length, limit: 90, urban: false },
     ];
-    this.urbanRange = [sTownStart - 60, sTownEnd + 40];
+    this.urbanRange = [sTownStart - 30, sTownEnd + 20];
 
-    this.crosswalkS = sTownStart + 110;
     this.signDefs = [
-      { s: 40, type: 'limit90' },
-      { s: 600, type: 'animals' },
-      { s: sCurve1 - 70, type: 'curveLeft' },
-      { s: sSummit + 15, type: 'slope' },
-      { s: sTownStart - 90, type: 'town' },
-      { s: sTownStart, type: 'limit50' },
-      { s: sTownStart + 75, type: 'crosswalk' },
-      { s: sStop - 100, type: 'crossing' },
-      { s: this.stopLineS, type: 'stop' },
-      { s: sStop + 60, type: 'limit50' },
-      { s: s30, type: 'limit30' },
-      { s: s30 + 45, type: 'noParking' },
-      { s: sTownEnd + 40, type: 'townEnd' },
-      { s: sTownEnd + 65, type: 'limit90' },
-      { s: this.rotEntryS - 85, type: 'roundabout' },
-      { s: this.rotEntryS - 14, type: 'yield' },
-      { s: this.rotExitS + 120, type: 'curves' },
-      { s: this.rotExitS + 150, type: 'noOvertake' },
-      { s: this.rotExitS + 1000, type: 'endProhib' },
-      { s: this.rotExitS + 1030, type: 'limit90' },
-      { s: this.horseshoeS - 80, type: 'curveRight' },
+      { s: 30, type: 'limit90' },
+      { s: this.cedaS - 55, type: 'curveLeft' },
       { s: this.cedaS - 14, type: 'yield' },
+      { s: sSummit - 45, type: 'slope' },
+      { s: sTownStart - 55, type: 'town' },
+      { s: sTownStart, type: 'limit50' },
+      { s: this.crosswalkS - 22, type: 'crosswalk' },
+      { s: sStop - 22, type: 'crossing' },
+      { s: sStop, type: 'limit30' },
+      { s: this.stopLineS, type: 'stop' },
+      { s: sTownEnd, type: 'townEnd' },
+      { s: sTownEnd + 22, type: 'limit90' },
+      { s: this.rotEntryS - 60, type: 'roundabout' },
+      { s: this.rotEntryS - 14, type: 'yield' },
+      { s: this.rotEntryS2 - 60, type: 'roundabout' },
+      { s: this.rotEntryS2 - 14, type: 'yield' },
+      { s: sEastHill - 130, type: 'curves' },
+      { s: sEastHill - 100, type: 'noOvertake' },
+      { s: sEastHill + 60, type: 'endProhib' },
+      { s: sEastHill + 130, type: 'animals' },
     ];
   }
 
@@ -199,15 +214,15 @@ export class Track {
     ground.rotation.x = -Math.PI / 2;
     // muy por debajo de cualquier vaguada de la rasante (mínimo -0,37 m):
     // si el plano queda por encima de la carretera, la "tapa" de verde
-    ground.position.set(720, -0.9, 465);
+    ground.position.set(500, -0.9, 250);
     scene.add(ground);
 
     // terreno con relieve bajo la carretera
     this.hSamples = [];
     for (let i = 0; i < this.N; i += 8) this.hSamples.push(this.samples[i]);
-    const terrGeo = new THREE.PlaneGeometry(1750, 1550, 175, 155);
+    const terrGeo = new THREE.PlaneGeometry(1600, 800, 160, 80);
     terrGeo.rotateX(-Math.PI / 2);
-    terrGeo.translate(730, 0, 465);
+    terrGeo.translate(500, 0, 250);
     const posAttr = terrGeo.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
       posAttr.setY(i, this.heightAt(posAttr.getX(i), posAttr.getZ(i)));
@@ -330,53 +345,42 @@ export class Track {
 
   buildRoundabout(scene) {
     const C = ROUNDABOUT_CENTER;
-    // calzada anular
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(8.8, 24, 48),
+    // explanada asfaltada de la rotonda (bajo los arcos y las gargantas)
+    const apron = new THREE.Mesh(
+      new THREE.CircleGeometry(50, 56),
       new THREE.MeshLambertMaterial({ color: 0x3d4148 })
     );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(C.x, 0.008, C.z);
-    scene.add(ring);
+    apron.rotation.x = -Math.PI / 2;
+    apron.position.set(C.x, 0.006, C.z);
+    scene.add(apron);
 
     // bordillo e isleta central
     const curb = new THREE.Mesh(
-      new THREE.CylinderGeometry(9.6, 9.6, 0.24, 40),
+      new THREE.CylinderGeometry(36, 36, 0.26, 56),
       new THREE.MeshLambertMaterial({ color: 0xb7bcc4 })
     );
-    curb.position.set(C.x, 0.12, C.z);
+    curb.position.set(C.x, 0.13, C.z);
     scene.add(curb);
     const island = new THREE.Mesh(
-      new THREE.CylinderGeometry(9.0, 9.0, 0.3, 40),
+      new THREE.CylinderGeometry(35, 35, 0.32, 56),
       new THREE.MeshLambertMaterial({ color: 0x5c8f43 })
     );
-    island.position.set(C.x, 0.24, C.z);
+    island.position.set(C.x, 0.26, C.z);
     scene.add(island);
 
-    // arbolitos decorativos en la isleta
-    for (const [ox, oz] of [[0, 0], [-4, 3], [3.5, -3]]) {
+    // vegetación decorativa en la isleta
+    for (const [ox, oz] of [[0, 0], [-16, 11], [14, -12], [11, 14], [-12, -14]]) {
       const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.15, 0.2, 1.4, 6),
+        new THREE.CylinderGeometry(0.22, 0.3, 2.2, 6),
         new THREE.MeshLambertMaterial({ color: 0x6b4a2b })
       );
-      trunk.position.set(C.x + ox, 1.0, C.z + oz);
+      trunk.position.set(C.x + ox, 1.35, C.z + oz);
       const crown = new THREE.Mesh(
-        new THREE.ConeGeometry(1.3, 2.8, 7),
+        new THREE.ConeGeometry(2.4, 4.6, 7),
         new THREE.MeshLambertMaterial({ color: 0x2e6b34 })
       );
-      crown.position.set(C.x + ox, 3.0, C.z + oz);
+      crown.position.set(C.x + ox, 4.3, C.z + oz);
       scene.add(trunk, crown);
-    }
-
-    // salidas decorativas este y oeste
-    for (const side of [-1, 1]) {
-      const stub = new THREE.Mesh(
-        new THREE.PlaneGeometry(60, 7),
-        new THREE.MeshLambertMaterial({ color: 0x3d4148 })
-      );
-      stub.rotation.x = -Math.PI / 2;
-      stub.position.set(C.x + side * 48, 0.005, C.z);
-      scene.add(stub);
     }
   }
 
@@ -413,7 +417,7 @@ export class Track {
       const x = pos.x + right.x * side * d + (Math.random() - 0.5) * 8;
       const z = pos.z + right.z * side * d + (Math.random() - 0.5) * 8;
       // evita la rotonda
-      if (Math.hypot(x - ROUNDABOUT_CENTER.x, z - ROUNDABOUT_CENTER.z) < 30) continue;
+      if (Math.hypot(x - ROUNDABOUT_CENTER.x, z - ROUNDABOUT_CENTER.z) < 58) continue;
       const sc = 0.7 + Math.random() * 0.9;
       const gy = this.heightAt(x, z);
       M.makeScale(sc, sc, sc).setPosition(x, gy + 1.3 * sc, z);
@@ -461,7 +465,7 @@ export class Track {
         new THREE.ConeGeometry(450 + Math.random() * 300, h, 5),
         new THREE.MeshLambertMaterial({ color: 0x7c8894 })
       );
-      m.position.set(720 + Math.cos(a) * r, h / 2 - 8, 465 + Math.sin(a) * r);
+      m.position.set(500 + Math.cos(a) * r, h / 2 - 8, 250 + Math.sin(a) * r);
       scene.add(m);
     }
   }

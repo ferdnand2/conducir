@@ -158,7 +158,6 @@ let seatbelt = false;
 function fastenBelt() {
   if (!running || seatbelt) return;
   seatbelt = true;
-  $('beltBanner').classList.add('hidden');
   toast('info', 'Cinturón abrochado ✔');
 }
 
@@ -194,7 +193,6 @@ for (const [id, key, valId] of [
 $('startBtn').addEventListener('click', startFlow);
 $('retryBtn').addEventListener('click', () => { $('results').classList.add('hidden'); beginDrive(); });
 $('menuBtn').addEventListener('click', () => { $('results').classList.add('hidden'); showMenu(); });
-$('beltBtn').addEventListener('click', fastenBelt);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && running) showMenu();
   if (e.code === 'KeyB' && running) fastenBelt();
@@ -207,7 +205,6 @@ function showMenu() {
   $('previewCanvas').classList.add('hidden');
   $('miniCanvas').classList.add('hidden');
   $('trackStatus').classList.add('hidden');
-  $('beltBanner').classList.add('hidden');
   if (gestures) { gestures.dispose(); gestures = null; }
 }
 
@@ -317,7 +314,6 @@ function beginDrive() {
   configureMap(config.map, null);
 
   $('examPanel').classList.remove('hidden');
-  $('beltBanner').classList.remove('hidden');
   $('miniCanvas').classList.remove('hidden');
   if (config.ctrl === 'gestos') $('previewCanvas').classList.remove('hidden');
 
@@ -378,7 +374,7 @@ const fmtTime = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padSt
 
 // estado interno para depuración
 window.__state = () => ({
-  car: car ? { x: car.pos.x, y: car.pos.y, z: car.pos.z, heading: car.heading } : null,
+  car: car ? { x: car.pos.x, y: car.pos.y, z: car.pos.z, heading: car.heading, speed: car.speed } : null,
   lastS,
   map: config.map,
   cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
@@ -391,6 +387,15 @@ window.__tp = (x, z, h = 0) => { if (car) { car.placeAt(new THREE.Vector3(x, 0, 
 window.__trackLen = () => track.length;
 window.__spur = () => ({ sx: SPUR_START.x, sz: SPUR_START.z, dx: SPUR_DIR.x, dz: SPUR_DIR.z, len: SPUR_LEN, px: RURAL_PORTAL_POS.x, pz: RURAL_PORTAL_POS.z });
 window.__lat = () => (car && config.map === 'rural' ? track.project(car.pos, lastS).lat : null);
+// navegación de prueba: rumbo hacia un punto de mira en el carril exterior
+window.__nav = () => {
+  if (!car || config.map !== 'rural') return null;
+  const proj = track.project(car.pos, lastS);
+  const look = track.poseAt(proj.s + 16);
+  const tx = look.pos.x + look.right.x * track.laneOut;
+  const tz = look.pos.z + look.right.z * track.laneOut;
+  return { desired: Math.atan2(tx - car.pos.x, tz - car.pos.z), lat: proj.lat, s: proj.s, speed: car.speed, heading: car.heading };
+};
 
 // gancho de depuración: coloca el coche en un punto s del circuito
 window.__teleport = (s) => {

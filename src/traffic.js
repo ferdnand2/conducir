@@ -33,14 +33,16 @@ export class TrafficManager {
   constructor(track, scene) {
     this.track = track;
     this.cars = [];
+    const L = track.length;
     const defs = [
-      { s: 160, dir: 1 }, { s: 700, dir: 1 }, { s: 1600, dir: 1 },
-      { s: 900, dir: -1 }, { s: 2200, dir: -1 }, { s: 3500, dir: -1 },
+      { f: 0.05, dir: 1 }, { f: 0.22, dir: 1 }, { f: 0.45, dir: 1 },
+      { f: 0.30, dir: -1 }, { f: 0.66, dir: 1 }, { f: 0.85, dir: -1 },
     ];
     defs.forEach((d, i) => {
       const mesh = makeCarMesh(COLORS[i % COLORS.length]);
       scene.add(mesh);
-      this.cars.push({ s: d.s, s0: d.s, dir: d.dir, speed: 0, mesh });
+      const s = d.f * L;
+      this.cars.push({ s, s0: s, dir: d.dir, speed: 0, mesh });
     });
   }
 
@@ -75,8 +77,10 @@ export class TrafficManager {
           }
         }
       } else {
-        // el sentido contrario no puede recorrer la rotonda al revés: la salta
-        if (c.s < T.rotExitS + 10 && c.s > T.rotEntryS - 30) c.s = T.rotEntryS - 30;
+        // el sentido contrario no puede recorrer la rotonda al revés: salta ambos arcos
+        for (const [en, ex] of [[T.rotEntryS, T.rotExitS], [T.rotEntryS2, T.rotExitS2]]) {
+          if (en < ex && c.s < ex + 10 && c.s > en - 30) c.s = en - 30;
+        }
       }
 
       const dv = target - c.speed;

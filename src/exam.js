@@ -132,6 +132,7 @@ export class Examiner {
     this.stopWindow = { active: false, minV: Infinity, done: false };
     this.cedaWindow = { active: false, minV: Infinity, done: false };
     this.rotWindow = { active: false, minV: Infinity, done: false };
+    this.rotWindow2 = { active: false, minV: Infinity, done: false };
     this.time = 0;
     this.distance = 0;
     this.finished = false;
@@ -244,7 +245,7 @@ export class Examiner {
       }
     });
 
-    // ---- Ceda al entrar en la rotonda ----
+    // ---- Ceda al entrar en la rotonda (dos pasadas) ----
     if (this.track.rotEntryS != null) {
       this.checkWindow(this.rotWindow, s, this.track.rotEntryS, 14, car, () => {
         if (this.rotWindow.minV * 3.6 > 25) {
@@ -252,6 +253,14 @@ export class Examiner {
         }
       });
     }
+    if (this.track.rotEntryS2 != null) {
+      this.checkWindow(this.rotWindow2, s, this.track.rotEntryS2, 14, car, () => {
+        if (this.rotWindow2.minV * 3.6 > 25) {
+          this.fault('deficiente', 'rot-d', 'No ceder el paso al entrar en la rotonda', 20);
+        }
+      });
+    }
+
 
     // ---- fin de recorrido (una vuelta) ----
     if (this.mode === 'examen' && this.distance > this.track.length * 0.97 && s < 30) {
