@@ -271,6 +271,11 @@ export class Track {
     const pts = this.curve.getSpacedPoints(n);
     const verts = [], uvs = [], idx = [];
     const segLen = this.length / n;
+    // dentro de la rotonda no dibujamos la calzada del spline: la dibuja
+    // buildRoundabout como anillo limpio (evita solapes en las gargantas)
+    const cx = ROUNDABOUT_CENTER.x, cz = ROUNDABOUT_CENTER.z;
+    const skipR = this.ringR + ROAD_HALF; // borde exterior del anillo
+    const inRing = (pt) => Math.hypot(pt.x - cx, pt.z - cz) < skipR;
     for (let i = 0; i <= n; i++) {
       const p = pts[i % n];
       const q = pts[(i + 1) % n];
@@ -281,7 +286,7 @@ export class Track {
       verts.push(p.x + rx * ROAD_HALF, p.y + 0.02, p.z + rz * ROAD_HALF);
       uvs.push(0, (i * segLen) / 8);
       uvs.push(1, (i * segLen) / 8);
-      if (i < n) {
+      if (i < n && !(inRing(p) || inRing(q))) {
         const a = i * 2;
         idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
       }
@@ -356,41 +361,47 @@ export class Track {
   buildRoundabout(scene) {
     const C = ROUNDABOUT_CENTER;
     const R = this.ringR, IR = this.islandR, H = this.roadHalf;
+    const flatRing = (r0, r1, color, y, basic = false) => {
+      const mat = basic
+        ? new THREE.MeshBasicMaterial({ color })
+        : new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
+      const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 72), mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(C.x, y, C.z);
+      scene.add(m);
+      return m;
+    };
 
-    // calzada anular completa (el anillo circular por el que se circula)
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(R - H, R + H, 64),
-      new THREE.MeshLambertMaterial({ color: 0x3d4148, side: THREE.DoubleSide })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(C.x, 0.012, C.z);
-    scene.add(ring);
-
-    // línea central discontinua del anillo (separador de los dos carriles)
+    // calzada anular única y limpia
+    flatRing(R - H, R + H, 0x3d4148, 0.02);
+    // líneas de borde continuas (blancas)
+    flatRing(R - H + 0.2, R - H + 0.5, 0xe8e6df, 0.032, true);
+    flatRing(R + H - 0.5, R + H - 0.2, 0xe8e6df, 0.032, true);
+    // línea central discontinua (círculo a radio R, separa los dos carriles)
     const laneMat = new THREE.MeshBasicMaterial({ color: 0xe8e6df });
-    const dashes = 40;
+    const dashes = 32;
     for (let i = 0; i < dashes; i++) {
-      const a = (i / dashes) * Math.PI * 2;
       if (i % 2) continue;
-      const seg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.18), laneMat);
+      const a = (i / dashes) * Math.PI * 2;
+      const seg = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 2.4), laneMat);
       seg.rotation.x = -Math.PI / 2;
-      seg.rotation.z = -a;
-      seg.position.set(C.x + Math.cos(a) * R, 0.02, C.z + Math.sin(a) * R);
+      seg.rotation.z = -a; // largo a lo largo de la tangente
+      seg.position.set(C.x + Math.cos(a) * R, 0.034, C.z + Math.sin(a) * R);
       scene.add(seg);
     }
 
-    // bordillo e isleta central
+    // bordillo e isleta central (el bordillo llega justo al borde interior del anillo)
     const curb = new THREE.Mesh(
-      new THREE.CylinderGeometry(IR + 0.8, IR + 0.8, 0.28, 56),
+      new THREE.CylinderGeometry(R - H, R - H, 0.3, 64),
       new THREE.MeshLambertMaterial({ color: 0xb7bcc4 })
     );
-    curb.position.set(C.x, 0.14, C.z);
+    curb.position.set(C.x, 0.15, C.z);
     scene.add(curb);
     const island = new THREE.Mesh(
-      new THREE.CylinderGeometry(IR, IR, 0.34, 56),
+      new THREE.CylinderGeometry(IR, IR, 0.38, 64),
       new THREE.MeshLambertMaterial({ color: 0x5c8f43 })
     );
-    island.position.set(C.x, 0.28, C.z);
+    island.position.set(C.x, 0.3, C.z);
     scene.add(island);
 
     // vegetación decorativa en la isleta
